@@ -1,302 +1,169 @@
 # Docker Infrastructure Setup Guide
-## Version 8.0 FINAL - Production Ready
+## Version 10.0 - FULLY AUTOMATED
 
-Complete setup for Oxidized Backup and GitLab CE with flexible configuration.
-
----
-
-## 📋 Features
-
-- ✅ **Config.env based** - All settings in one file
-- ✅ **Flexible installation** - Choose Oxidized, GitLab, or both
-- ✅ **Certificate options** - Self-signed OR existing certificates
-- ✅ **Docker networking** - Correct container communication
-- ✅ **Complete automation** - All scripts generated automatically
-- ✅ **Production ready** - Logging, backups, monitoring
+Complete setup for Oxidized Backup and GitLab CE with **fully automated installation** and interactive configuration wizard.
 
 ---
 
-## 🚀 Quick Start (20 minutes)
+## 🎯 What's New in Version 10.0
+
+- ✅ **Interactive Configuration Wizard** - No manual config.env editing required
+- ✅ **Fully Automated Installation** - Single command runs everything
+- ✅ **Smart Reboot Detection** - Only reboots if Docker needs installation
+- ✅ **Automatic CSR Generation** - For existing certificate mode
+- ✅ **Certificate Verification Loop** - Waits until certs are valid
+- ✅ **Auto-build & Start** - Containers built and started automatically
+- ✅ **GitLab Integration** - SSH keys and projects created automatically
+
+---
+
+## 🚀 Quick Start (15 minutes for self-signed, 20 for existing certs)
 
 ### Prerequisites
 
-- Ubuntu 24.04 LTS (fresh installation)
+- Ubuntu 24.04 LTS (fresh installation recommended)
 - Root or sudo access
 - Network configured with static IP
-- DNS entries (for external domains)
+- DNS entries (if using real domains)
 
 ### Step 1: Download Files
 
 ```bash
 # Create directory
-mkdir -p /tmp/docker-infrastructure
-cd /tmp/docker-infrastructure
+mkdir -p ~/docker-infrastructure
+cd ~/docker-infrastructure
 
-# Copy these 3 files here:
-# - config.env
+# Download or copy these files:
 # - master_setup.sh
-# - README.md (this file)
+# - config.env.example
+# - scripts/ (entire directory)
 ```
 
-### Step 2: Configure
-
-Edit `config.env` with your settings:
+### Step 2: Run Master Setup (THE ONLY COMMAND YOU NEED!)
 
 ```bash
-nano config.env
-```
-
-**Critical settings to review:**
-
-```bash
-# Organization
-ORG_NAME="Simple Designer"
-DOMAIN="simple-designer.ch"
-
-# What to install
-INSTALL_OXIDIZED="true"   # Set to "false" to skip
-INSTALL_GITLAB="true"     # Set to "false" to skip
-
-# Certificate mode
-CERT_MODE="selfsigned"    # OR "existing"
-
-# Users
-ADMIN_USER="administrator"
-DOCKER_USER="dockeruser"
-DOCKER_USER_PASSWORD="Docker123!"
-
-# Passwords
-GITLAB_ROOT_PASSWORD="SuperSecureP@ssw0rd2025!"
-DEVICE_DEFAULT_PASSWORD="backup1234!"
-
-# Network IPs (adjust if needed)
-OXINET_OXIDIZED_IP="172.16.0.2"
-GITLABNET_GITLAB_IP="172.16.0.18"
-```
-
-### Step 3: Run Master Setup
-
-```bash
-cd /tmp/docker-infrastructure
 sudo bash master_setup.sh
 ```
 
-This will:
-- Load config.env
-- Validate all settings
-- Create `/opt/docker-infrastructure`
-- Generate all scripts and configurations
-- Take ~2 minutes
+**That's it!** The script will:
 
-### Step 4: Initial System Setup
+1. ✅ Ask you configuration questions interactively
+2. ✅ Generate config.env automatically
+3. ✅ Validate all settings
+4. ✅ Create directory structure
+5. ✅ Generate all configurations
+6. ✅ Install system packages
+7. ✅ Install Docker (if needed - will reboot if necessary)
+8. ✅ Create Docker networks
+9. ✅ Setup certificates (auto-generate or wait for yours)
+10. ✅ Configure firewall
+11. ✅ Build Docker containers
+12. ✅ Start all services
+13. ✅ Setup GitLab integration (if both services enabled)
+14. ✅ Verify everything is running
 
-```bash
-cd /opt/docker-infrastructure
-sudo ./scripts/01_initial_setup.sh
+### Interactive Configuration Wizard
+
+When you run `master_setup.sh`, you'll be asked:
+
+```
+=== Organization Settings ===
+Organization Name [ORGNAME]: MyCompany
+Domain [example.com]: mycompany.com
+
+=== Installation Options ===
+Install Oxidized? [Y/n]: Y
+Install GitLab? [Y/n]: Y
+
+=== Certificate Mode ===
+1) Self-signed (automatic, for testing)
+2) Existing (from Windows CA or other)
+Choose [1]: 1
+
+=== System Users ===
+Admin username [administrator]: admin
+Docker username [dockeruser]: dockeruser
+Docker user password: ********
+
+=== GitLab Settings ===
+GitLab root password: ********
+GitLab Oxidized user password [Ox1d1z3d!B@ckUp#2025]: ********
+
+=== Device Credentials ===
+Default device username [backup]: backup
+Default device password: ********
+
+=== Network Devices ===
+Enter devices in format: IP:MODEL:USERNAME:PASSWORD
+Example: 10.99.99.50:panos:backup:password
+Leave empty when done.
+
+Device 1: 10.99.99.50:panos:backup:mypassword
+Device 2: 192.168.1.1:ios:admin:cisco123
+Device 3: [ENTER to finish]
+
+=== Network Settings ===
+Allowed management network [192.168.71.0/28]: 192.168.1.0/24
 ```
 
-This installs:
-- Base packages
-- Docker Engine
-- Creates users
-
-**⚠️ REBOOT REQUIRED after this step!**
-
-```bash
-sudo reboot
-```
-
-### Step 5: Setup Networks
-
-After reboot:
-
-```bash
-cd /opt/docker-infrastructure
-./scripts/02_setup_networks.sh
-```
-
-Creates Docker networks (oxinet, gitlabnet, nginxnet)
-
-### Step 6: Setup Certificates
-
-#### Option A: Self-Signed (Quick)
-
-```bash
-./scripts/03_certificate_setup.sh
-```
-
-Done! Certificates auto-generated.
-
-#### Option B: Existing Certificates (Production)
-
-If using Windows CA or Let's Encrypt:
-
-```bash
-# Generate CSRs
-./scripts/04_generate_csr.sh oxidized.simple-designer.ch
-./scripts/04_generate_csr.sh gitlab.simple-designer.ch
-
-# Submit CSRs to your CA, get signed certificates
-
-# Copy signed certificates to:
-# certificates/ssl/oxidized.simple-designer.ch.crt
-# certificates/ssl/gitlab.simple-designer.ch.crt
-
-# Verify
-./scripts/05_verify_certificates.sh
-```
-
-### Step 7: Setup Firewall
-
-```bash
-./scripts/07_setup_firewall.sh
-```
-
-### Step 8: Build and Start
-
-```bash
-cd /opt/docker-infrastructure
-
-# Build containers
-docker compose build --no-cache
-
-# Start services
-docker compose up -d
-
-# Watch logs
-docker compose logs -f
-```
-
-### Step 9: Initialize GitLab (if installed)
-
-Wait 5 minutes for services to fully start:
-
-```bash
-./scripts/08_init_gitlab.sh
-```
-
-This creates:
-- Oxidized user in GitLab
-- Network project
-- Access token
-
-### Step 10: Setup SSH Keys (if both services)
-
-```bash
-./scripts/06_setup_ssh_keys.sh
-```
-
-Follow prompts to add deploy key to GitLab.
+The script will then automatically create `config.env` with your settings.
 
 ---
 
-## 📊 Installation Matrix
+## 🔄 Two Installation Paths
 
-| Component | Self-Signed Cert | Existing Cert | Both Services | GitLab Only | Oxidized Only |
-|-----------|-----------------|---------------|---------------|-------------|---------------|
-| Scripts 01-02 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Script 03 | Auto-generate | Manual copy | ✅ | ✅ | ✅ |
-| Script 04 | Skip | Generate CSR | ✅ | ✅ | ✅ |
-| Script 05 | Verify | Verify | ✅ | ✅ | ✅ |
-| Script 06 | N/A | N/A | ✅ only | ❌ | ❌ |
-| Script 07 | Firewall | Firewall | ✅ | ✅ | ✅ |
-| Script 08 | N/A | N/A | ✅ | ✅ | ❌ |
-| Script 09 | Status | Status | ✅ | ✅ | ✅ |
+### Path A: Self-Signed Certificates (Fully Automatic)
+
+```bash
+sudo bash master_setup.sh
+```
+
+**Follow prompts, choose option 1 for certificates.**
+
+If Docker needs installation:
+- System will reboot automatically
+- After reboot: `cd /opt/docker-infrastructure && sudo ./scripts/00_continue_setup.sh`
+
+If Docker already installed:
+- Everything runs to completion
+- Services start automatically
+- Done!
+
+**Total time:** ~15 minutes
+
+### Path B: Existing Certificates (Semi-Automatic)
+
+```bash
+sudo bash master_setup.sh
+```
+
+**Follow prompts, choose option 2 for certificates.**
+
+The script will:
+1. Generate CSRs automatically
+2. Display CSR locations
+3. **PAUSE** and wait for you to:
+   - Submit CSRs to your CA
+   - Download signed certificates
+   - Place them in `certificates/ssl/`
+4. Verify certificates in a loop
+5. Continue automatically once certs are valid
+
+**Total time:** ~20 minutes + CA processing time
 
 ---
 
-## 🔧 Configuration Reference
+## 📊 What Gets Installed
 
-### config.env Sections
+### Services Installed (Based on Your Choices)
 
-#### 1. Organization Settings
-```bash
-ORG_NAME="Your Company"
-DOMAIN="example.com"
-```
+| Service | Purpose | Port |
+|---------|---------|------|
+| Oxidized | Network device backup | 8888 (internal), 443 (HTTPS) |
+| GitLab CE | Git repository server | 2222 (SSH), 443 (HTTPS) |
+| Nginx | Reverse proxy | 80, 443 |
 
-#### 2. Installation Options
-```bash
-INSTALL_OXIDIZED="true"  # Install Oxidized
-INSTALL_GITLAB="true"    # Install GitLab
-```
-
-#### 3. Certificate Mode
-```bash
-CERT_MODE="selfsigned"   # OR "existing"
-```
-
-**Self-signed:**
-- Automatic certificate generation
-- CA certificate created
-- Good for testing/internal use
-
-**Existing:**
-- Use Windows CA, Let's Encrypt, etc.
-- Generate CSRs with script 04
-- Submit to your CA
-- Copy signed certs to certificates/ssl/
-
-#### 4. Network Configuration
-```bash
-# Oxidized Network
-OXINET_SUBNET="172.16.0.0/28"
-OXINET_OXIDIZED_IP="172.16.0.2"
-
-# GitLab Network
-GITLABNET_SUBNET="172.16.0.16/28"
-GITLABNET_GITLAB_IP="172.16.0.18"
-```
-
-**Important:** These are Docker internal IPs, not your server IP.
-
-#### 5. Device Configuration
-```bash
-# Default credentials for all devices
-DEVICE_DEFAULT_USERNAME="backup"
-DEVICE_DEFAULT_PASSWORD="backup1234!"
-DEVICE_DEFAULT_MODEL="panos"
-
-# Individual devices
-DEVICE_1="10.99.99.50:panos:backup:password:"
-DEVICE_2="192.168.1.1:ios:admin:password:"
-```
-
----
-
-## 🌐 Service Access
-
-### After Installation
-
-| Service | URL | Port | Notes |
-|---------|-----|------|-------|
-| Oxidized Web | https://oxidized.simple-designer.ch | 443 | Config backup UI |
-| GitLab Web | https://gitlab.simple-designer.ch | 443 | Git repository |
-| GitLab SSH | gitlab.simple-designer.ch | 2222 | Git push/pull |
-
-### Default Credentials
-
-#### GitLab Root
-```bash
-# Get initial password
-docker exec gitlab-ce cat /etc/gitlab/initial_root_password
-
-# Or check logs
-cat logs/08_gitlab_init_*.log | grep Password
-```
-
-#### GitLab Oxidized User
-- Username: `oxidized`
-- Password: (from config.env `GITLAB_OXIDIZED_PASSWORD`)
-- Default: `Ox1d1z3d!B@ckUp#2025`
-
-#### System Users
-- Admin: `administrator`
-- Docker: `dockeruser` / `Docker123!`
-
----
-
-## 📁 Directory Structure
+### Directory Structure Created
 
 ```
 /opt/docker-infrastructure/
@@ -320,183 +187,211 @@ cat logs/08_gitlab_init_*.log | grep Password
 │   └── config/
 │       └── gitlab.rb
 ├── scripts/
+│   ├── 00_continue_setup.sh (created if reboot needed)
 │   ├── 01_initial_setup.sh
 │   ├── 02_setup_networks.sh
 │   ├── 03_certificate_setup.sh
 │   ├── 04_generate_csr.sh
 │   ├── 05_verify_certificates.sh
-│   ├── 06_setup_ssh_keys.sh
+│   ├── 06_setup_ssh_and_gitlab.sh
 │   ├── 07_setup_firewall.sh
-│   ├── 08_init_gitlab.sh
-│   ├── 09_check_status.sh
-│   └── backup.sh
-├── logs/                    # All operation logs
-├── config.env               # Configuration
-├── docker-compose.yml
+│   ├── 08_check_status.sh
+│   └── 09_backup.sh
+├── logs/                    # All logs
+├── config.env               # Generated configuration
+├── docker-compose.yml       # Generated
 └── README.md
 ```
 
 ---
 
-## 🔍 Monitoring
+## 🔍 Monitoring & Verification
 
 ### Check Status
 
 ```bash
-# Quick status
 cd /opt/docker-infrastructure
-./scripts/09_check_status.sh
+./scripts/08_check_status.sh
+```
 
-# Detailed container logs
+**Output shows:**
+- Running containers
+- Health status
+- Networks
+- Recent backups
+
+### View Logs
+
+```bash
+# All services
+docker compose logs -f
+
+# Specific service
 docker logs oxidized --tail 50
 docker logs gitlab-ce --tail 50
 docker logs nginx-proxy --tail 50
 
-# All logs
-docker compose logs -f
-
 # Oxidized wrapper log
 docker exec oxidized cat /var/log/oxidized/wrapper_$(date +%Y%m%d).log
 
-# Git push log
+# Git push hook log
 docker exec oxidized cat /var/log/oxidized/git_push_hook.log
+
+# Setup logs
+ls -lh /opt/docker-infrastructure/logs/
 ```
 
-### View Backups
+### Access Services
+
+| Service | URL | Default Credentials |
+|---------|-----|---------------------|
+| Oxidized | `https://oxidized.yourdomain.com` | No auth required |
+| GitLab | `https://gitlab.yourdomain.com` | root / (check logs) |
+
+**Get GitLab root password:**
 
 ```bash
-# Oxidized backup repository
-docker exec oxidized bash
-cd /opt/oxidized/devices.git
-git log --oneline
-ls -la
-```
+# From container
+docker exec gitlab-ce cat /etc/gitlab/initial_root_password
 
-### Resource Usage
-
-```bash
-docker stats --no-stream
+# From logs
+cat /opt/docker-infrastructure/logs/06_ssh_gitlab_*.log | grep "Password:"
 ```
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Problem: Docker not installed
+### Script Stops with "Reboot Required"
+
+**This is normal!** Docker was just installed.
 
 ```bash
-# Check if script 01 completed
-ls /usr/bin/docker
-
-# If missing, re-run
-./scripts/01_initial_setup.sh
-sudo reboot
+# After reboot
+cd /opt/docker-infrastructure
+sudo ./scripts/00_continue_setup.sh
 ```
 
-### Problem: User not in docker group
+### Certificates Not Valid (Existing Mode)
 
+The script will wait in a loop until certificates are valid.
+
+**Check these files exist:**
 ```bash
-# Check groups
-groups
-
-# If 'docker' not listed
-newgrp docker
-
-# Or logout and login again
+ls -lh /opt/docker-infrastructure/certificates/ssl/
+# Should show:
+# oxidized.yourdomain.com.crt
+# oxidized.yourdomain.com.key
+# gitlab.yourdomain.com.crt (if GitLab installed)
+# gitlab.yourdomain.com.key (if GitLab installed)
 ```
 
-### Problem: Certificates don't match
-
+**Verify manually:**
 ```bash
-# Verify all certificates
+cd /opt/docker-infrastructure
 ./scripts/05_verify_certificates.sh
-
-# Check specific cert
-openssl x509 -in certificates/ssl/oxidized.simple-designer.ch.crt -text -noout
 ```
 
-### Problem: Oxidized not backing up
+### Container Won't Start
 
 ```bash
-# Check if device is reachable
+# Check logs
+docker logs <container-name>
+
+# Rebuild
+docker compose down
+docker compose build --no-cache
+docker compose up -d
+
+# Check status
+docker ps -a
+```
+
+### Oxidized Not Backing Up Devices
+
+```bash
+# Check device connectivity
 docker exec oxidized ping -c 3 10.99.99.50
 
-# Check Oxidized logs
-docker logs oxidized --tail 100
-
-# Check config
+# Check Oxidized config
 docker exec oxidized cat /etc/oxidized/config
+
+# Check router.db
+docker exec oxidized cat /opt/oxidized/router.db
 
 # Trigger manual backup
 docker exec oxidized curl -X POST http://localhost:8888/reload
+
+# Check logs
+docker logs oxidized --tail 100
 ```
 
-### Problem: GitLab not accessible
+### Oxidized Can't Push to GitLab
+
+```bash
+# Test SSH connection
+docker exec oxidized ssh -p 22 -i /etc/oxidized/keys/gitlab -T git@gitlab-ce
+
+# Check Git remote
+docker exec oxidized git -C /opt/oxidized/devices.git remote -v
+# Should show: git@gitlab-ce:oxidized/network.git
+
+# Check hook log
+docker exec oxidized cat /var/log/oxidized/git_push_hook.log
+```
+
+### GitLab Web UI Not Accessible
 
 ```bash
 # Check if running
 docker ps | grep gitlab
 
-# Check health
+# Check GitLab status
 docker exec gitlab-ce gitlab-ctl status
-
-# Check logs
-docker logs gitlab-ce --tail 100
 
 # Reconfigure
 docker exec gitlab-ce gitlab-ctl reconfigure
+
+# Wait longer (GitLab takes 3-5 minutes to fully start)
 ```
 
-### Problem: Oxidized can't push to GitLab
+### Port Already in Use
+
+Edit `/opt/docker-infrastructure/config.env`:
 
 ```bash
-# Check SSH keys exist
-docker exec oxidized ls -la /etc/oxidized/keys/
+# Change ports
+NGINX_HTTP_PORT="8080"
+NGINX_HTTPS_PORT="8443"
+GITLAB_SSH_PORT="2223"
 
-# Test SSH connection (Docker networking)
-docker exec oxidized ssh -p 22 -i /etc/oxidized/keys/gitlab -T git@gitlab-ce
-
-# Check known_hosts
-docker exec oxidized cat /opt/oxidized/.ssh/known_hosts
-
-# Check Git remote
-docker exec oxidized git -C /opt/oxidized/devices.git remote -v
-
-# Expected: git@gitlab-ce:oxidized/network.git
-```
-
-### Problem: Wrong Git remote URL
-
-If you see external domain instead of `gitlab-ce`:
-
-```bash
-# Fix remote URL
-docker exec oxidized bash -c "
-cd /opt/oxidized/devices.git
-git remote remove origin
-git remote add origin git@gitlab-ce:oxidized/network.git
-"
-
-# Rebuild oxidized
-docker compose stop oxidized
-docker compose build --no-cache oxidized
-docker compose up -d oxidized
+# Regenerate
+cd /opt/docker-infrastructure
+sudo bash master_setup.sh  # Will use existing config.env
 ```
 
 ---
 
 ## 🔄 Maintenance
 
-### Backup
+### Add More Devices
 
 ```bash
-# Manual backup
 cd /opt/docker-infrastructure
-./scripts/backup.sh
 
-# Automated backups (cron)
-crontab -e
-# Add: 0 2 * * * /opt/docker-infrastructure/scripts/backup.sh
+# Edit config.env
+nano config.env
+
+# Add devices
+DEVICE_3="192.168.1.3:junos:admin:password:"
+DEVICE_4="192.168.1.4:ios:admin:password:"
+
+# Regenerate configuration
+sudo bash master_setup.sh  # Uses existing config, only updates changed parts
+
+# Or rebuild Oxidized manually
+docker compose build --no-cache oxidized
+docker compose up -d oxidized
 ```
 
 ### Update Services
@@ -507,59 +402,43 @@ cd /opt/docker-infrastructure
 # Pull latest images
 docker compose pull
 
-# Restart services
+# Restart
+docker compose down
 docker compose up -d
-
-# Rebuild Oxidized (if config changed)
-docker compose build --no-cache oxidized
-docker compose up -d oxidized
 ```
 
-### Add More Devices
+### Backup
 
 ```bash
-# Edit config.env
-nano config.env
+cd /opt/docker-infrastructure
 
-# Add device
-DEVICE_2="192.168.1.2:ios:admin:password:"
+# Manual backup
+./scripts/09_backup.sh
 
-# Regenerate router.db
-sudo bash master_setup.sh
-
-# Rebuild Oxidized
-docker compose build --no-cache oxidized
-docker compose up -d oxidized
-```
-
-### View Logs
-
-```bash
-# All setup logs
-ls -lh logs/
-
-# Latest setup
-tail -f logs/master_setup_*.log
-
-# Live container logs
-docker compose logs -f
+# Setup automated backups (cron)
+crontab -e
+# Add: 0 2 * * * /opt/docker-infrastructure/scripts/09_backup.sh
 ```
 
 ### Restore from Backup
 
 ```bash
+cd /opt/docker-infrastructure
+
 # Stop services
 docker compose down
 
 # Restore volumes
 cd /opt/backups/YYYYMMDD_HHMMSS/
 docker run --rm -v oxidized_data:/data -v $(pwd):/backup alpine tar xzf /backup/oxidized_data.tar.gz -C /data
+docker run --rm -v gitlab_data:/data -v $(pwd):/backup alpine tar xzf /backup/gitlab_data.tar.gz -C /data
 
 # Restore configs
 cp -r nginx /opt/docker-infrastructure/
 cp -r oxidized /opt/docker-infrastructure/
+cp -r gitlab /opt/docker-infrastructure/
 
-# Start services
+# Start
 cd /opt/docker-infrastructure
 docker compose up -d
 ```
@@ -568,70 +447,107 @@ docker compose up -d
 
 ## 🔐 Security Best Practices
 
-1. **Change default passwords** in config.env before deployment
-2. **Use existing certificates** (not self-signed) for production
-3. **Enable firewall** (`UFW_ENABLED="true"`)
-4. **Restrict management network** (`ALLOWED_NETWORK`)
-5. **Regular backups** (automate with cron)
-6. **Update regularly** (docker compose pull)
-7. **Monitor logs** (check for failed login attempts)
-8. **Use strong passwords** (12+ characters, mixed case, numbers, symbols)
+1. ✅ **Use strong passwords** (12+ characters, mixed case, numbers, symbols)
+2. ✅ **Use existing certificates** (not self-signed) in production
+3. ✅ **Enable firewall** (UFW_ENABLED="true" in config)
+4. ✅ **Restrict management network** (set ALLOWED_NETWORK correctly)
+5. ✅ **Regular backups** (setup cron job)
+6. ✅ **Update regularly** (docker compose pull)
+7. ✅ **Monitor logs** (check for failed login attempts)
+8. ✅ **Change default passwords** immediately after setup
 
 ---
 
-## 📞 Support
+## ❓ FAQ
 
-### Common Issues
+**Q: Can I run this on an existing server with Docker?**
 
-- **Port conflicts:** Change ports in config.env
-- **Out of memory:** Adjust `GITLAB_MEMORY_LIMIT`
-- **Slow GitLab:** Increase server RAM (min 4GB recommended)
-- **Device not backing up:** Check firewall, credentials, network
-- **SSH issues:** Regenerate keys with script 06
+A: Yes! Set `SKIP_DOCKER_INSTALL="true"` in config.env before running, or if using the wizard, the script will detect existing Docker and skip installation.
 
-### Log Locations
+**Q: Do I need both Oxidized and GitLab?**
 
-| Log Type | Location |
-|----------|----------|
-| Master setup | `logs/master_setup_*.log` |
-| Scripts | `logs/XX_*_*.log` |
-| Oxidized wrapper | Container: `/var/log/oxidized/wrapper_*.log` |
-| Git push hook | Container: `/var/log/oxidized/git_push_hook.log` |
-| Docker containers | `docker logs <container>` |
+A: No! You can install just Oxidized, just GitLab, or both. The wizard asks which services you want.
+
+**Q: What if I make a mistake in the configuration wizard?**
+
+A: Just delete `config.env` and run `master_setup.sh` again. Or edit `config.env` manually and re-run the script.
+
+**Q: Can I change settings later?**
+
+A: Yes! Edit `/opt/docker-infrastructure/config.env` and run `sudo bash master_setup.sh` again. It will regenerate configurations with new settings.
+
+**Q: How long does GitLab take to start?**
+
+A: 3-5 minutes for full initialization. The script waits automatically.
+
+**Q: Can I use Let's Encrypt certificates?**
+
+A: Yes! Choose "existing certificates" mode, use certbot to get Let's Encrypt certs, and place them in `certificates/ssl/`.
+
+**Q: What if my server doesn't have internet access?**
+
+A: You'll need to pre-install Docker and download all required packages offline. This script assumes internet connectivity.
 
 ---
 
-## 📝 Version History
+## 📝 Configuration Reference
 
-- **v8.0** - Config.env based, selfsigned support, service selection
-- **v7.x** - Docker networking fixes
-- **v6.x** - Initial automated setup
-- **v5.x** - Manual configuration
+### config.env Sections
+
+The wizard generates all of this automatically, but you can also edit manually:
+
+```bash
+# Organization
+ORG_NAME="MyCompany"
+DOMAIN="example.com"
+
+# Services
+INSTALL_OXIDIZED="true"
+INSTALL_GITLAB="true"
+
+# Certificate mode
+CERT_MODE="selfsigned"  # or "existing"
+
+# Users
+ADMIN_USER="administrator"
+DOCKER_USER="dockeruser"
+DOCKER_USER_PASSWORD="SecurePassword123!"
+
+# Passwords
+GITLAB_ROOT_PASSWORD="GitLabRootPass123!"
+GITLAB_OXIDIZED_PASSWORD="Ox1d1z3d!B@ckUp#2025"
+DEVICE_DEFAULT_PASSWORD="DeviceBackupPass123!"
+
+# Devices
+DEVICE_1="10.99.99.50:panos:backup:password:"
+DEVICE_2="192.168.1.1:ios:admin:cisco123:"
+
+# Network
+ALLOWED_NETWORK="192.168.1.0/24"
+```
 
 ---
 
 ## ✅ Success Checklist
 
-After installation, verify:
+After installation completes, verify:
 
 - [ ] All scripts executed without errors
-- [ ] Docker containers running: `docker ps`
-- [ ] Networks created: `docker network ls`
-- [ ] Certificates valid: `./scripts/05_verify_certificates.sh`
+- [ ] `docker ps` shows all containers running
+- [ ] `docker network ls` shows oxinet, gitlabnet, nginxnet
+- [ ] Services accessible in browser
+- [ ] Oxidized backing up devices (check logs)
+- [ ] GitLab receiving commits (if using both)
 - [ ] Firewall configured: `sudo ufw status`
-- [ ] Services accessible via browser
-- [ ] Oxidized backing up devices
-- [ ] GitLab receiving commits (if using GitLab)
-- [ ] Logs clean: `docker compose logs`
-- [ ] Backup script works: `./scripts/backup.sh`
+- [ ] Backup script works: `./scripts/09_backup.sh`
 
 ---
 
-## 🎓 Advanced Configuration
+## 🎓 Advanced Topics
 
 ### Custom Network Ranges
 
-Edit in config.env:
+In `config.env`:
 
 ```bash
 OXINET_SUBNET="10.1.0.0/24"
@@ -640,34 +556,33 @@ OXINET_OXIDIZED_IP="10.1.0.10"
 
 ### Multiple Oxidized Instances
 
-Change IPs and ports:
+Change container name and IP in `config.env`, then regenerate.
 
-```bash
-OXINET_OXIDIZED_IP="172.16.0.3"
-OXIDIZED_REST_PORT="8889"
-```
+### External Database
 
-### External PostgreSQL
-
-Modify gitlab.rb after setup:
-
-```ruby
-postgresql['enable'] = false
-gitlab_rails['db_adapter'] = 'postgresql'
-gitlab_rails['db_host'] = 'postgres.example.com'
-```
+For GitLab, edit `gitlab/config/gitlab.rb` after setup to use external PostgreSQL.
 
 ---
 
 ## 📚 Additional Resources
 
-- Oxidized Documentation: https://github.com/ytti/oxidized
-- GitLab Documentation: https://docs.gitlab.com
-- Docker Documentation: https://docs.docker.com
-- Nginx Documentation: https://nginx.org/en/docs/
+- [Oxidized Documentation](https://github.com/ytti/oxidized)
+- [GitLab Documentation](https://docs.gitlab.com)
+- [Docker Documentation](https://docs.docker.com)
+- [Nginx Documentation](https://nginx.org/en/docs/)
 
 ---
 
-**🎉 That's it! You now have a complete, production-ready infrastructure.**
+## 🎉 That's It!
 
-For questions or issues, check the troubleshooting section or review the logs.
+With Version 10.0, you get a **fully automated setup** from start to finish.
+
+Just run `sudo bash master_setup.sh`, answer a few questions, and everything else is handled automatically!
+
+**Questions? Issues?** Check the troubleshooting section or review logs in `/opt/docker-infrastructure/logs/`.
+
+---
+
+**Version:** 10.0  
+**Last Updated:** 2025  
+**License:** MIT
