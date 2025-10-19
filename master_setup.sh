@@ -179,8 +179,17 @@ if [ ! -f "config.env" ]; then
     if [ "$INSTALL_GITLAB" = "true" ]; then
         GITLAB_ROOT_PASSWORD_ESC=$(escape_for_sed "$GITLAB_ROOT_PASSWORD")
         GITLAB_OXIDIZED_PASSWORD_ESC=$(escape_for_sed "$GITLAB_OXIDIZED_PASSWORD")
+        GITLAB_OXIDIZED_USER_ESC=$(escape_for_sed "$GITLAB_OXIDIZED_USER")
+        GITLAB_OXIDIZED_EMAIL_ESC=$(escape_for_sed "$GITLAB_OXIDIZED_EMAIL")
+        GITLAB_PROJECT_NAMESPACE_ESC=$(escape_for_sed "$GITLAB_PROJECT_NAMESPACE")
+        GITLAB_PROJECT_NAME_ESC=$(escape_for_sed "$GITLAB_PROJECT_NAME")
+        
         sed -i "s|^GITLAB_ROOT_PASSWORD=.*|GITLAB_ROOT_PASSWORD=\"${GITLAB_ROOT_PASSWORD_ESC}\"|" config.env
         sed -i "s|^GITLAB_OXIDIZED_PASSWORD=.*|GITLAB_OXIDIZED_PASSWORD=\"${GITLAB_OXIDIZED_PASSWORD_ESC}\"|" config.env
+        sed -i "s|^GITLAB_OXIDIZED_USER=.*|GITLAB_OXIDIZED_USER=\"${GITLAB_OXIDIZED_USER_ESC}\"|" config.env
+        sed -i "s|^GITLAB_OXIDIZED_EMAIL=.*|GITLAB_OXIDIZED_EMAIL=\"${GITLAB_OXIDIZED_EMAIL_ESC}\"|" config.env
+        sed -i "s|^GITLAB_PROJECT_NAMESPACE=.*|GITLAB_PROJECT_NAMESPACE=\"${GITLAB_PROJECT_NAMESPACE_ESC}\"|" config.env
+        sed -i "s|^GITLAB_PROJECT_NAME=.*|GITLAB_PROJECT_NAME=\"${GITLAB_PROJECT_NAME_ESC}\"|" config.env
     fi
     
     if [ "$INSTALL_OXIDIZED" = "true" ]; then
