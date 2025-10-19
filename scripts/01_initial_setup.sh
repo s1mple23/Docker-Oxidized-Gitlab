@@ -102,6 +102,9 @@ if [ "$NEEDS_REBOOT" = true ]; then
     echo "╚══════════════════════════════════════════════╝"
     echo ""
     echo "Changes require a system reboot to take effect."
+    echo ""
+    # Create marker file so master_setup.sh knows to continue
+    touch "${INSTALL_DIR}/.reboot_required"
     exit 99  # Special exit code to signal reboot needed
 else
     echo ""

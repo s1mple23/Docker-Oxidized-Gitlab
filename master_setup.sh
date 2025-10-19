@@ -1,6 +1,6 @@
 #!/bin/bash
 # master_setup.sh - FULLY AUTOMATED Infrastructure Setup
-# Version: 10.1 - Auto-generated passwords
+# Version: 10.2 - Clean and optimized
 set -e
 
 RED='\033[0;31m'
@@ -14,26 +14,27 @@ NC='\033[0m'
 trap 'echo -e "${RED}Error on line $LINENO${NC}"; exit 1' ERR
 
 # ============================================================================
-# PASSWORD GENERATION FUNCTION
+# PASSWORD GENERATION
 # ============================================================================
 generate_password() {
     local length=${1:-16}
-    # Generate secure random password
     tr -dc 'A-Za-z0-9!@#$%^&*()_+=' < /dev/urandom | head -c "$length"
+}
+
+escape_for_sed() {
+    echo "$1" | sed 's/[&/\]/\\&/g'
 }
 
 clear
 echo "╔══════════════════════════════════════════════╗"
 echo "║  Docker Infrastructure Master Setup          ║"
-echo "║  Version 10.1 - AUTO-GENERATED PASSWORDS     ║"
+echo "║  Version 10.2 - FULLY AUTOMATED              ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 echo "Started: $(date)"
 echo ""
 
 SCRIPT_START_DIR="$(pwd)"
-
-# Store generated passwords
 declare -A GENERATED_PASSWORDS
 
 # ============================================================================
@@ -55,7 +56,7 @@ if [ ! -f "config.env" ]; then
     echo -e "${YELLOW}Note: Passwords will be auto-generated and shown at the end.${NC}"
     echo ""
     
-    # Organization Settings
+    # Organization
     echo -e "${CYAN}=== Organization Settings ===${NC}"
     read -p "Organization Name [ORGNAME]: " ORG_NAME
     ORG_NAME=${ORG_NAME:-ORGNAME}
@@ -108,7 +109,6 @@ if [ ! -f "config.env" ]; then
     fi
     
     if [ "$INSTALL_OXIDIZED" = "true" ]; then
-        # Device credentials
         echo ""
         echo -e "${CYAN}=== Device Credentials ===${NC}"
         read -p "Default device username [backup]: " DEVICE_DEFAULT_USERNAME
@@ -136,10 +136,8 @@ if [ ! -f "config.env" ]; then
             read -p "Device $DEVICE_COUNT: " DEVICE_INPUT
             [ -z "$DEVICE_INPUT" ] && break
             
-            # Parse device input
             IFS=':' read -r ip model user pass <<< "$DEVICE_INPUT"
             
-            # Use defaults if not provided
             [ -z "$user" ] && user="$DEVICE_DEFAULT_USERNAME"
             if [ -z "$pass" ]; then
                 pass=$(generate_password 16)
@@ -163,6 +161,10 @@ if [ ! -f "config.env" ]; then
     
     cp config.env.example config.env
     
+    # Escape passwords
+    DOCKER_USER_PASSWORD_ESC=$(escape_for_sed "$DOCKER_USER_PASSWORD")
+    ALLOWED_NETWORK_ESC=$(escape_for_sed "$ALLOWED_NETWORK")
+    
     # Replace values
     sed -i "s/^ORG_NAME=.*/ORG_NAME=\"${ORG_NAME}\"/" config.env
     sed -i "s/^DOMAIN=.*/DOMAIN=\"${DOMAIN}\"/" config.env
@@ -171,19 +173,21 @@ if [ ! -f "config.env" ]; then
     sed -i "s/^CERT_MODE=.*/CERT_MODE=\"${CERT_MODE}\"/" config.env
     sed -i "s/^ADMIN_USER=.*/ADMIN_USER=\"${ADMIN_USER}\"/" config.env
     sed -i "s/^DOCKER_USER=.*/DOCKER_USER=\"${DOCKER_USER}\"/" config.env
-    sed -i "s/^DOCKER_USER_PASSWORD=.*/DOCKER_USER_PASSWORD=\"${DOCKER_USER_PASSWORD}\"/" config.env
-    sed -i "s/^ALLOWED_NETWORK=.*/ALLOWED_NETWORK=\"${ALLOWED_NETWORK}\"/" config.env
+    sed -i "s|^DOCKER_USER_PASSWORD=.*|DOCKER_USER_PASSWORD=\"${DOCKER_USER_PASSWORD_ESC}\"|" config.env
+    sed -i "s|^ALLOWED_NETWORK=.*|ALLOWED_NETWORK=\"${ALLOWED_NETWORK_ESC}\"|" config.env
     
     if [ "$INSTALL_GITLAB" = "true" ]; then
-        sed -i "s/^GITLAB_ROOT_PASSWORD=.*/GITLAB_ROOT_PASSWORD=\"${GITLAB_ROOT_PASSWORD}\"/" config.env
-        sed -i "s/^GITLAB_OXIDIZED_PASSWORD=.*/GITLAB_OXIDIZED_PASSWORD=\"${GITLAB_OXIDIZED_PASSWORD}\"/" config.env
+        GITLAB_ROOT_PASSWORD_ESC=$(escape_for_sed "$GITLAB_ROOT_PASSWORD")
+        GITLAB_OXIDIZED_PASSWORD_ESC=$(escape_for_sed "$GITLAB_OXIDIZED_PASSWORD")
+        sed -i "s|^GITLAB_ROOT_PASSWORD=.*|GITLAB_ROOT_PASSWORD=\"${GITLAB_ROOT_PASSWORD_ESC}\"|" config.env
+        sed -i "s|^GITLAB_OXIDIZED_PASSWORD=.*|GITLAB_OXIDIZED_PASSWORD=\"${GITLAB_OXIDIZED_PASSWORD_ESC}\"|" config.env
     fi
     
     if [ "$INSTALL_OXIDIZED" = "true" ]; then
+        DEVICE_DEFAULT_PASSWORD_ESC=$(escape_for_sed "$DEVICE_DEFAULT_PASSWORD")
         sed -i "s/^DEVICE_DEFAULT_USERNAME=.*/DEVICE_DEFAULT_USERNAME=\"${DEVICE_DEFAULT_USERNAME}\"/" config.env
-        sed -i "s/^DEVICE_DEFAULT_PASSWORD=.*/DEVICE_DEFAULT_PASSWORD=\"${DEVICE_DEFAULT_PASSWORD}\"/" config.env
+        sed -i "s|^DEVICE_DEFAULT_PASSWORD=.*|DEVICE_DEFAULT_PASSWORD=\"${DEVICE_DEFAULT_PASSWORD_ESC}\"|" config.env
         
-        # Remove example device and add new ones
         sed -i '/^DEVICE_1=/d' config.env
         if [ -n "$DEVICE_LINES" ]; then
             echo "" >> config.env
@@ -195,7 +199,7 @@ if [ ! -f "config.env" ]; then
     echo -e "${GREEN}✅ config.env created${NC}"
     echo ""
     
-    # Save passwords to file for later display
+    # Save passwords
     PASSWORD_FILE="/tmp/infrastructure_passwords_$(date +%Y%m%d_%H%M%S).txt"
     echo "# GENERATED PASSWORDS - $(date)" > "$PASSWORD_FILE"
     echo "# ============================================" >> "$PASSWORD_FILE"
@@ -216,14 +220,12 @@ fi
 echo "Loading configuration..."
 source config.env
 
-# Expand variables
 OXIDIZED_DOMAIN=$(eval echo "${OXIDIZED_DOMAIN}")
 GITLAB_DOMAIN=$(eval echo "${GITLAB_DOMAIN}")
 GITLAB_PROJECT_PATH=$(eval echo "${GITLAB_PROJECT_PATH}")
 OXIDIZED_GIT_EMAIL=$(eval echo "${OXIDIZED_GIT_EMAIL}")
 GITLAB_OXIDIZED_EMAIL=$(eval echo "${GITLAB_OXIDIZED_EMAIL}")
 
-# Validate
 REQUIRED_VARS=("ORG_NAME" "DOMAIN" "ADMIN_USER" "DOCKER_USER" "DOCKER_USER_PASSWORD")
 [ "${INSTALL_OXIDIZED}" = "true" ] && REQUIRED_VARS+=("DEVICE_DEFAULT_PASSWORD")
 [ "${INSTALL_GITLAB}" = "true" ] && REQUIRED_VARS+=("GITLAB_ROOT_PASSWORD")
@@ -273,13 +275,76 @@ sudo chown -R "$(whoami):$(whoami)" "$INSTALL_DIR" 2>/dev/null || sudo chown -R 
 sudo chmod -R 755 "$INSTALL_DIR"
 
 SETUP_LOG="$INSTALL_DIR/logs/master_setup_$(date +%Y%m%d_%H%M%S).log"
+CONFIG_SUMMARY="$INSTALL_DIR/INSTALLATION_CONFIG.txt"
+
+# Create config summary
+cat > "$CONFIG_SUMMARY" << EOF
+# ============================================================================
+# INSTALLATION CONFIGURATION SUMMARY
+# ============================================================================
+# Generated: $(date)
+# Installation Directory: $INSTALL_DIR
+#
+# This file contains all configuration settings used during installation.
+# Keep this file for reference and documentation purposes.
+# ============================================================================
+
+[ORGANIZATION]
+Name: $ORG_NAME
+Domain: $DOMAIN
+
+[SERVICES]
+Oxidized: $INSTALL_OXIDIZED
+GitLab: $INSTALL_GITLAB
+
+[CERTIFICATE]
+Mode: $CERT_MODE
+
+[USERS]
+Admin User: $ADMIN_USER
+Docker User: $DOCKER_USER
+
+[DOMAINS]
+EOF
+
+[ "${INSTALL_OXIDIZED}" = "true" ] && echo "Oxidized: $OXIDIZED_DOMAIN" >> "$CONFIG_SUMMARY"
+[ "${INSTALL_GITLAB}" = "true" ] && echo "GitLab: $GITLAB_DOMAIN" >> "$CONFIG_SUMMARY"
+
+cat >> "$CONFIG_SUMMARY" << EOF
+
+[NETWORK]
+Allowed Network: $ALLOWED_NETWORK
+EOF
+
+if [ "${INSTALL_OXIDIZED}" = "true" ]; then
+    DEVICE_COUNT=$(compgen -v | grep '^DEVICE_[0-9]\+$' | wc -l)
+    cat >> "$CONFIG_SUMMARY" << EOF
+
+[OXIDIZED]
+Device Username: $DEVICE_DEFAULT_USERNAME
+Devices Configured: $DEVICE_COUNT
+EOF
+fi
+
+if [ "${INSTALL_GITLAB}" = "true" ]; then
+    cat >> "$CONFIG_SUMMARY" << EOF
+
+[GITLAB]
+SSH Port: $GITLAB_SSH_PORT
+Oxidized User: $GITLAB_OXIDIZED_USER
+Project: $GITLAB_PROJECT_PATH
+EOF
+fi
+
+echo "" >> "$CONFIG_SUMMARY"
+echo "See GENERATED_PASSWORDS.txt for passwords (if generated)" >> "$CONFIG_SUMMARY"
+
 exec > >(tee -a "$SETUP_LOG") 2>&1
 
 echo "Copying config.env..."
 cp "$SCRIPT_START_DIR/config.env" "$INSTALL_DIR/config.env"
 chmod 600 "$INSTALL_DIR/config.env"
 
-# Copy password file if it exists
 if [ -n "$PASSWORD_FILE" ] && [ -f "$PASSWORD_FILE" ]; then
     cp "$PASSWORD_FILE" "$INSTALL_DIR/GENERATED_PASSWORDS.txt"
     chmod 600 "$INSTALL_DIR/GENERATED_PASSWORDS.txt"
@@ -299,7 +364,6 @@ SCRIPTS_SOURCE="$SCRIPT_START_DIR/scripts"
 
 if [ ! -d "$SCRIPTS_SOURCE" ]; then
     echo -e "${RED}ERROR: Scripts directory not found: $SCRIPTS_SOURCE${NC}"
-    echo "Expected: $SCRIPTS_SOURCE"
     exit 1
 fi
 
@@ -318,13 +382,14 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "Generating Configurations"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# OXIDIZED CONFIGURATION
+# OXIDIZED
 if [ "${INSTALL_OXIDIZED}" = "true" ]; then
-echo ""
-echo "Creating Oxidized configuration..."
-
-cat > oxidized/config/config << EOF
+    echo ""
+    echo "Creating Oxidized configuration..."
+    
+    cat > oxidized/config/config << EOF
 ---
+# Note: Per-device credentials from router.db take precedence
 username: ${DEVICE_DEFAULT_USERNAME}
 password: ${DEVICE_DEFAULT_PASSWORD}
 model: ${DEVICE_DEFAULT_MODEL}
@@ -352,6 +417,8 @@ source:
     map:
       name: 0
       model: 1
+      username: 2
+      password: 3
 
 hooks:
   push_to_remote:
@@ -362,36 +429,34 @@ hooks:
     cmd: ${OXIDIZED_HOOK_CMD}
 EOF
 
-cat > oxidized/config/router.db << 'ROUTERDB_HEADER'
+    cat > oxidized/config/router.db << 'ROUTERDB_HEADER'
 # Format: IP:MODEL:USERNAME:PASSWORD:ENABLE
+# Per-device credentials override defaults in config file
 ROUTERDB_HEADER
 
-DEVICE_COUNT=0
-for var in $(compgen -v | grep '^DEVICE_[0-9]\+$' | sort -V); do
-    device_string="${!var}"
-    if [ -n "$device_string" ]; then
-        IFS=':' read -r ip model user pass enable <<< "$device_string"
-        [ -z "$model" ] && model="${DEVICE_DEFAULT_MODEL}"
-        [ -z "$user" ] && user="${DEVICE_DEFAULT_USERNAME}"
-        [ -z "$pass" ] && pass="${DEVICE_DEFAULT_PASSWORD}"
-        echo "${ip}:${model}:${user}:${pass}:${enable}" >> oxidized/config/router.db
-        DEVICE_COUNT=$((DEVICE_COUNT + 1))
-    fi
-done
+    DEVICE_COUNT=0
+    for var in $(compgen -v | grep '^DEVICE_[0-9]\+$' | sort -V); do
+        device_string="${!var}"
+        if [ -n "$device_string" ]; then
+            IFS=':' read -r ip model user pass enable <<< "$device_string"
+            [ -z "$model" ] && model="${DEVICE_DEFAULT_MODEL}"
+            [ -z "$user" ] && user=""
+            [ -z "$pass" ] && pass=""
+            echo "${ip}:${model}:${user}:${pass}:${enable}" >> oxidized/config/router.db
+            DEVICE_COUNT=$((DEVICE_COUNT + 1))
+        fi
+    done
 
-# Wrapper script
-if [ "${INSTALL_GITLAB}" = "true" ]; then
-cat > oxidized/config/oxidized_wrapper.sh << EOF
+    # Wrapper script
+    if [ "${INSTALL_GITLAB}" = "true" ]; then
+        cat > oxidized/config/oxidized_wrapper.sh << EOF
 #!/bin/bash
 set -e
 LOG="/var/log/oxidized/wrapper_\$(date +%Y%m%d).log"
 mkdir -p /var/log/oxidized
 exec > >(tee -a "\$LOG") 2>&1
 
-echo "=========================================="
 echo "Oxidized Wrapper (Docker Networking)"
-echo "GitLab: gitlab-ce:22"
-echo "=========================================="
 sleep 30
 
 git config --global user.name "${OXIDIZED_GIT_USER}"
@@ -402,61 +467,47 @@ mkdir -p /opt/oxidized/.ssh
 chmod 700 /opt/oxidized/.ssh
 
 if [ ! -f /opt/oxidized/.ssh/known_hosts ]; then
-    echo "Adding gitlab-ce to known_hosts..."
     ssh-keyscan -p 22 -H gitlab-ce > /opt/oxidized/.ssh/known_hosts 2>/dev/null
 fi
 
 if [ ! -d "/opt/oxidized/devices.git" ]; then
-    echo "Initializing Git repository..."
     cd /opt/oxidized
     git init devices.git
     cd devices.git
     echo "# Network Devices - ${ORG_NAME}" > README.md
     git add README.md
     git commit -m "Initial commit"
-    echo "✅ Repository initialized"
 fi
 
 cd /opt/oxidized/devices.git
 git remote remove origin 2>/dev/null || true
 git remote add origin "git@gitlab-ce:${GITLAB_PROJECT_PATH}.git"
 
-echo "✅ Remote configured: git@gitlab-ce:${GITLAB_PROJECT_PATH}.git"
-
 cd /opt/oxidized
 exec oxidized
 EOF
-else
-cat > oxidized/config/oxidized_wrapper.sh << EOF
+    else
+        cat > oxidized/config/oxidized_wrapper.sh << 'EOF'
 #!/bin/bash
 set -e
-LOG="/var/log/oxidized/wrapper.log"
-mkdir -p /var/log/oxidized
-exec > >(tee -a "\$LOG") 2>&1
-echo "Oxidized Wrapper (Local Mode)"
-git config --global user.name "${OXIDIZED_GIT_USER}"
-git config --global user.email "${OXIDIZED_GIT_EMAIL}"
+git config --global user.name "Oxidized"
+git config --global user.email "oxidized@localhost"
 [ ! -d "/opt/oxidized/devices.git" ] && git init /opt/oxidized/devices.git
 cd /opt/oxidized
 exec oxidized
 EOF
-fi
+    fi
 
-# Git push hook
-if [ "${INSTALL_GITLAB}" = "true" ]; then
-cat > oxidized/config/git_push_hook.sh << 'HOOK'
+    # Git push hook
+    if [ "${INSTALL_GITLAB}" = "true" ]; then
+        cat > oxidized/config/git_push_hook.sh << 'HOOK'
 #!/bin/bash
-LOG_DIR="/var/log/oxidized"
-LOG="$LOG_DIR/git_push_hook.log"
-mkdir -p "$LOG_DIR"
+LOG="/var/log/oxidized/git_push_hook.log"
+mkdir -p /var/log/oxidized
 
-log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG"
-}
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG"; }
 
-log "Hook triggered by Oxidized"
 cd /opt/oxidized/devices.git || exit 1
-
 [ -z "$(git status --porcelain)" ] && exit 0
 
 log "Committing changes..."
@@ -469,20 +520,18 @@ export GIT_SSH_COMMAND="ssh -p 22 -i /etc/oxidized/keys/gitlab -o UserKnownHosts
 if timeout 30 git push origin main 2>&1 | tee -a "$LOG"; then
     log "✅ Push successful"
 else
-    log "❌ Push failed (exit $?)"
+    log "❌ Push failed"
 fi
 HOOK
-else
-cat > oxidized/config/git_push_hook.sh << 'HOOK'
-#!/bin/bash
-echo "[$(date)] Local backup only" >> /var/log/oxidized/git_push_hook.log
-HOOK
-fi
+    else
+        echo '#!/bin/bash' > oxidized/config/git_push_hook.sh
+        echo 'echo "[$(date)] Local backup" >> /var/log/oxidized/git_push_hook.log' >> oxidized/config/git_push_hook.sh
+    fi
 
-chmod +x oxidized/config/*.sh
+    chmod +x oxidized/config/*.sh
 
-# Dockerfile
-cat > oxidized/Dockerfile << 'DOCKERFILE'
+    # Dockerfile
+    cat > oxidized/Dockerfile << 'DOCKERFILE'
 FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
@@ -507,15 +556,15 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=90s CMD curl -f http://l
 CMD ["/opt/oxidized/oxidized_wrapper.sh"]
 DOCKERFILE
 
-echo -e "${GREEN}✅ Oxidized configured ($DEVICE_COUNT devices)${NC}"
+    echo -e "${GREEN}✅ Oxidized configured ($DEVICE_COUNT devices)${NC}"
 fi
 
-# GITLAB CONFIGURATION
+# GITLAB
 if [ "${INSTALL_GITLAB}" = "true" ]; then
-echo ""
-echo "Creating GitLab configuration..."
-
-cat > gitlab/config/gitlab.rb << EOF
+    echo ""
+    echo "Creating GitLab configuration..."
+    
+    cat > gitlab/config/gitlab.rb << EOF
 external_url 'https://${GITLAB_DOMAIN}'
 nginx['ssl_certificate'] = "/etc/gitlab/ssl/${GITLAB_DOMAIN}.crt"
 nginx['ssl_certificate_key'] = "/etc/gitlab/ssl/${GITLAB_DOMAIN}.key"
@@ -524,11 +573,11 @@ gitlab_rails['initial_root_password'] = '${GITLAB_ROOT_PASSWORD}'
 gitlab_rails['gitlab_shell_ssh_port'] = ${GITLAB_SSH_PORT}
 EOF
 
-chmod 600 gitlab/config/gitlab.rb
-echo -e "${GREEN}✅ GitLab configured${NC}"
+    chmod 600 gitlab/config/gitlab.rb
+    echo -e "${GREEN}✅ GitLab configured${NC}"
 fi
 
-# NGINX CONFIGURATION
+# NGINX
 echo ""
 echo "Creating Nginx configuration..."
 
@@ -552,7 +601,7 @@ http {
 NGINX_MAIN
 
 if [ "${INSTALL_OXIDIZED}" = "true" ]; then
-cat > nginx/conf.d/oxidized.conf << EOF
+    cat > nginx/conf.d/oxidized.conf << EOF
 upstream oxidized_backend {
     server ${OXINET_OXIDIZED_IP}:8888;
 }
@@ -576,7 +625,7 @@ EOF
 fi
 
 if [ "${INSTALL_GITLAB}" = "true" ]; then
-cat > nginx/conf.d/gitlab.conf << EOF
+    cat > nginx/conf.d/gitlab.conf << EOF
 upstream gitlab_backend {
     server ${GITLABNET_GITLAB_IP}:443;
 }
@@ -604,16 +653,16 @@ fi
 
 echo -e "${GREEN}✅ Nginx configured${NC}"
 
-# DOCKER COMPOSE (same as before - keeping it concise)
+# DOCKER COMPOSE
 echo ""
 echo "Creating Docker Compose file..."
 
-cat > docker-compose.yml << EOF
+cat > docker-compose.yml << 'COMPOSE_HEADER'
 services:
-EOF
+COMPOSE_HEADER
 
 if [ "${INSTALL_GITLAB}" = "true" ]; then
-cat >> docker-compose.yml << EOF
+    cat >> docker-compose.yml << EOF
   gitlab-ce:
     image: gitlab/gitlab-ce:latest
     container_name: gitlab-ce
@@ -643,7 +692,7 @@ EOF
 fi
 
 if [ "${INSTALL_OXIDIZED}" = "true" ]; then
-cat >> docker-compose.yml << EOF
+    cat >> docker-compose.yml << EOF
   oxidized:
     build: ./oxidized
     container_name: oxidized
@@ -656,25 +705,23 @@ cat >> docker-compose.yml << EOF
         ipv4_address: ${OXINET_OXIDIZED_IP}
 EOF
 
-if [ "${INSTALL_GITLAB}" = "true" ]; then
-cat >> docker-compose.yml << EOF
-      gitlabnet:
-EOF
-fi
+    if [ "${INSTALL_GITLAB}" = "true" ]; then
+        echo "      gitlabnet:" >> docker-compose.yml
+    fi
 
-cat >> docker-compose.yml << EOF
+    cat >> docker-compose.yml << EOF
     restart: unless-stopped
 EOF
 
-if [ "${INSTALL_GITLAB}" = "true" ]; then
-cat >> docker-compose.yml << EOF
+    if [ "${INSTALL_GITLAB}" = "true" ]; then
+        cat >> docker-compose.yml << 'EOF'
     depends_on:
       gitlab-ce:
         condition: service_healthy
 EOF
-fi
+    fi
 
-cat >> docker-compose.yml << EOF
+    cat >> docker-compose.yml << 'EOF'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8888"]
       interval: 30s
@@ -701,82 +748,203 @@ cat >> docker-compose.yml << EOF
         ipv4_address: ${NGINXNET_NGINX_IP}
 EOF
 
-if [ "${INSTALL_OXIDIZED}" = "true" ]; then
-cat >> docker-compose.yml << EOF
-      oxinet:
-EOF
-fi
+[ "${INSTALL_OXIDIZED}" = "true" ] && echo "      oxinet:" >> docker-compose.yml
+[ "${INSTALL_GITLAB}" = "true" ] && echo "      gitlabnet:" >> docker-compose.yml
 
-if [ "${INSTALL_GITLAB}" = "true" ]; then
-cat >> docker-compose.yml << EOF
-      gitlabnet:
-EOF
-fi
-
-cat >> docker-compose.yml << EOF
+cat >> docker-compose.yml << 'EOF'
     restart: unless-stopped
     depends_on:
 EOF
 
-if [ "${INSTALL_OXIDIZED}" = "true" ]; then
-cat >> docker-compose.yml << EOF
+[ "${INSTALL_OXIDIZED}" = "true" ] && cat >> docker-compose.yml << 'EOF'
       oxidized:
         condition: service_healthy
 EOF
-fi
 
-if [ "${INSTALL_GITLAB}" = "true" ]; then
-cat >> docker-compose.yml << EOF
+[ "${INSTALL_GITLAB}" = "true" ] && cat >> docker-compose.yml << 'EOF'
       gitlab-ce:
         condition: service_healthy
 EOF
-fi
 
-cat >> docker-compose.yml << EOF
+cat >> docker-compose.yml << 'EOF'
 
 volumes:
 EOF
 
-if [ "${INSTALL_OXIDIZED}" = "true" ]; then
-cat >> docker-compose.yml << EOF
+[ "${INSTALL_OXIDIZED}" = "true" ] && cat >> docker-compose.yml << 'EOF'
   oxidized_data:
   oxidized_logs:
 EOF
-fi
 
-if [ "${INSTALL_GITLAB}" = "true" ]; then
-cat >> docker-compose.yml << EOF
+[ "${INSTALL_GITLAB}" = "true" ] && cat >> docker-compose.yml << 'EOF'
   gitlab_logs:
   gitlab_data:
 EOF
-fi
 
-cat >> docker-compose.yml << EOF
+cat >> docker-compose.yml << 'EOF'
   nginx_logs:
 
 networks:
 EOF
 
-if [ "${INSTALL_OXIDIZED}" = "true" ]; then
-cat >> docker-compose.yml << EOF
+[ "${INSTALL_OXIDIZED}" = "true" ] && cat >> docker-compose.yml << 'EOF'
   oxinet:
     external: true
 EOF
-fi
 
-if [ "${INSTALL_GITLAB}" = "true" ]; then
-cat >> docker-compose.yml << EOF
+[ "${INSTALL_GITLAB}" = "true" ] && cat >> docker-compose.yml << 'EOF'
   gitlabnet:
     external: true
 EOF
-fi
 
-cat >> docker-compose.yml << EOF
+cat >> docker-compose.yml << 'EOF'
   nginxnet:
     external: true
 EOF
 
 echo -e "${GREEN}✅ Docker Compose created${NC}"
+
+# ============================================================================
+# CHECK IF CONTINUING AFTER REBOOT
+# ============================================================================
+if [ -f "$INSTALL_DIR/.reboot_required" ]; then
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Detected reboot completion - continuing setup..."
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    rm -f "$INSTALL_DIR/.reboot_required"
+    
+    cd "$INSTALL_DIR"
+    source config.env
+    
+    OXIDIZED_DOMAIN=$(eval echo "${OXIDIZED_DOMAIN}")
+    GITLAB_DOMAIN=$(eval echo "${GITLAB_DOMAIN}")
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Step 2: Docker Network Setup"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ./scripts/02_setup_networks.sh
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Step 3: Certificate Setup"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ./scripts/03_certificate_setup.sh
+    
+    if [ "$CERT_MODE" = "existing" ]; then
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Step 4: Generate CSRs"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        
+        [ "${INSTALL_OXIDIZED}" = "true" ] && ./scripts/04_generate_csr.sh "${OXIDIZED_DOMAIN}"
+        [ "${INSTALL_GITLAB}" = "true" ] && ./scripts/04_generate_csr.sh "${GITLAB_DOMAIN}"
+        
+        echo ""
+        echo "╔══════════════════════════════════════════════╗"
+        echo "║     ⚠️  ACTION REQUIRED: CERTIFICATES       ║"
+        echo "╚══════════════════════════════════════════════╝"
+        echo ""
+        echo "CSRs generated in: certificates/csr/"
+        echo ""
+        echo "Please:"
+        echo "1. Submit CSRs to your CA"
+        echo "2. Place signed certificates in: certificates/ssl/"
+        [ "${INSTALL_OXIDIZED}" = "true" ] && echo "   - ${OXIDIZED_DOMAIN}.crt"
+        [ "${INSTALL_GITLAB}" = "true" ] && echo "   - ${GITLAB_DOMAIN}.crt"
+        echo ""
+        read -p "Press ENTER when certificates are ready..."
+        
+        echo ""
+        echo "Verifying certificates..."
+        while true; do
+            if ./scripts/05_verify_certificates.sh 2>&1 | grep -q "All checks passed"; then
+                echo -e "${GREEN}✅ All certificates verified${NC}"
+                break
+            else
+                echo ""
+                echo -e "${RED}❌ Certificate verification failed${NC}"
+                echo ""
+                read -p "Press ENTER to verify again..."
+            fi
+        done
+    fi
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Step 5: Firewall Setup"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ./scripts/07_setup_firewall.sh
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Step 6: Building Docker Containers"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    docker compose build --no-cache
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Step 7: Starting Services"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    docker compose up -d
+    
+    echo ""
+    echo "Waiting for services to start (60 seconds)..."
+    sleep 60
+    
+    if [ "${INSTALL_GITLAB}" = "true" ] && [ "${INSTALL_OXIDIZED}" = "true" ]; then
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Step 8: GitLab Integration"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        ./scripts/06_setup_ssh_and_gitlab.sh
+    fi
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Final Step: Status Check"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ./scripts/08_check_status.sh
+    
+    if [ -f "GENERATED_PASSWORDS.txt" ]; then
+        echo ""
+        echo "╔══════════════════════════════════════════════╗"
+        echo "║     🔐 GENERATED PASSWORDS                  ║"
+        echo "╚══════════════════════════════════════════════╝"
+        echo ""
+        cat GENERATED_PASSWORDS.txt
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "⚠️  IMPORTANT SECURITY NOTICE:"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "📝 Saved in: $INSTALL_DIR/GENERATED_PASSWORDS.txt"
+        echo ""
+        echo "⚠️  PLEASE:"
+        echo "   1. Save these passwords securely"
+        echo "   2. Change them after first login"
+        echo "   3. Delete GENERATED_PASSWORDS.txt after saving"
+        echo ""
+    fi
+    
+    echo ""
+    echo "╔══════════════════════════════════════════════╗"
+    echo "║     ✅ INSTALLATION COMPLETE!               ║"
+    echo "╚══════════════════════════════════════════════╝"
+    echo ""
+    echo "📁 Installation Directory: $INSTALL_DIR"
+    echo "📋 Configuration Summary: $CONFIG_SUMMARY"
+    echo ""
+    echo "🌐 Services:"
+    [ "${INSTALL_OXIDIZED}" = "true" ] && echo "  • Oxidized: https://${OXIDIZED_DOMAIN}"
+    [ "${INSTALL_GITLAB}" = "true" ] && echo "  • GitLab: https://${GITLAB_DOMAIN}"
+    echo ""
+    echo "✅ Setup completed: $(date)"
+    echo ""
+    
+    exit 0
+fi
 
 # ============================================================================
 # RUN AUTOMATED INSTALLATION
@@ -787,140 +955,13 @@ echo "║     RUNNING AUTOMATED INSTALLATION           ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 
-# SCRIPT 01 - Check if reboot needed
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Step 1: Initial System Setup"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-sudo ./scripts/01_initial_setup.sh
-EXIT_CODE=$?
+sudo ./scripts/01_initial_setup.sh || EXIT_CODE=$?
 
-if [ $EXIT_CODE -eq 99 ]; then
-    echo ""
-    echo "Creating continuation script..."
-    
-    # Create continuation script with password display
-    cat > ./scripts/00_continue_setup.sh << 'CONTINUE_SCRIPT'
-#!/bin/bash
-set -e
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/.."
-source config.env
-
-OXIDIZED_DOMAIN=$(eval echo "${OXIDIZED_DOMAIN}")
-GITLAB_DOMAIN=$(eval echo "${GITLAB_DOMAIN}")
-
-echo "╔══════════════════════════════════════════════╗"
-echo "║  Continuing Setup After Reboot               ║"
-echo "╚══════════════════════════════════════════════╝"
-echo ""
-
-./scripts/02_setup_networks.sh
-./scripts/03_certificate_setup.sh
-
-if [ "$CERT_MODE" = "existing" ]; then
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "⚠️  CERTIFICATE MODE: EXISTING"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    
-    [ "${INSTALL_OXIDIZED}" = "true" ] && ./scripts/04_generate_csr.sh "${OXIDIZED_DOMAIN}"
-    [ "${INSTALL_GITLAB}" = "true" ] && ./scripts/04_generate_csr.sh "${GITLAB_DOMAIN}"
-    
-    echo ""
-    echo "╔══════════════════════════════════════════════╗"
-    echo "║     ⚠️  ACTION REQUIRED                     ║"
-    echo "╚══════════════════════════════════════════════╝"
-    echo ""
-    echo "CSRs generated in: certificates/csr/"
-    echo ""
-    echo "Please:"
-    echo "1. Submit CSRs to your Certificate Authority"
-    echo "2. Place signed certificates in: certificates/ssl/"
-    [ "${INSTALL_OXIDIZED}" = "true" ] && echo "   - ${OXIDIZED_DOMAIN}.crt"
-    [ "${INSTALL_GITLAB}" = "true" ] && echo "   - ${GITLAB_DOMAIN}.crt"
-    echo ""
-    read -p "Press ENTER when certificates are ready..."
-    
-    echo ""
-    echo "Verifying certificates..."
-    while true; do
-        if ./scripts/05_verify_certificates.sh 2>&1 | grep -q "All checks passed"; then
-            echo "✅ All certificates verified"
-            break
-        else
-            echo ""
-            echo "❌ Certificate verification failed"
-            echo ""
-            echo "Required files:"
-            [ "${INSTALL_OXIDIZED}" = "true" ] && echo "  certificates/ssl/${OXIDIZED_DOMAIN}.crt"
-            [ "${INSTALL_OXIDIZED}" = "true" ] && echo "  certificates/ssl/${OXIDIZED_DOMAIN}.key"
-            [ "${INSTALL_GITLAB}" = "true" ] && echo "  certificates/ssl/${GITLAB_DOMAIN}.crt"
-            [ "${INSTALL_GITLAB}" = "true" ] && echo "  certificates/ssl/${GITLAB_DOMAIN}.key"
-            echo ""
-            read -p "Press ENTER to check again..."
-        fi
-    done
-fi
-
-./scripts/07_setup_firewall.sh
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Building Docker containers..."
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-docker compose build --no-cache
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Starting services..."
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-docker compose up -d
-
-echo ""
-echo "Waiting for services to start (60 seconds)..."
-sleep 60
-
-if [ "${INSTALL_GITLAB}" = "true" ] && [ "${INSTALL_OXIDIZED}" = "true" ]; then
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "GitLab Integration (SSH keys, user, project)"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    ./scripts/06_setup_ssh_and_gitlab.sh
-fi
-
-./scripts/08_check_status.sh
-
-# Display generated passwords
-if [ -f "GENERATED_PASSWORDS.txt" ]; then
-    echo ""
-    echo "╔══════════════════════════════════════════════╗"
-    echo "║     🔐 GENERATED PASSWORDS                  ║"
-    echo "╚══════════════════════════════════════════════╝"
-    echo ""
-    cat GENERATED_PASSWORDS.txt
-    echo ""
-    echo "⚠️  IMPORTANT SECURITY NOTICE:"
-    echo "   • These passwords are saved in: $(pwd)/GENERATED_PASSWORDS.txt"
-    echo "   • Please change them after first login!"
-    echo "   • Store them securely (password manager recommended)"
-    echo "   • Delete GENERATED_PASSWORDS.txt after saving elsewhere"
-    echo ""
-fi
-
-echo ""
-echo "╔══════════════════════════════════════════════╗"
-echo "║     ✅ INSTALLATION COMPLETE!               ║"
-echo "╚══════════════════════════════════════════════╝"
-echo ""
-[ "${INSTALL_OXIDIZED}" = "true" ] && echo "🌐 Oxidized: https://${OXIDIZED_DOMAIN}"
-[ "${INSTALL_GITLAB}" = "true" ] && echo "🌐 GitLab: https://${GITLAB_DOMAIN}"
-echo ""
-echo "✅ Setup completed: $(date)"
-CONTINUE_SCRIPT
-    
-    chmod +x ./scripts/00_continue_setup.sh
-    
+if [ "${EXIT_CODE:-0}" -eq 99 ]; then
     echo ""
     echo "╔══════════════════════════════════════════════╗"
     echo "║     ⚠️  REBOOT REQUIRED!                    ║"
@@ -928,12 +969,14 @@ CONTINUE_SCRIPT
     echo ""
     echo "Docker has been installed. System must reboot."
     echo ""
-    echo "After reboot, run:"
+    echo "⚠️  AFTER REBOOT, simply run:"
+    echo ""
     echo "  cd $INSTALL_DIR"
-    echo "  sudo ./scripts/00_continue_setup.sh"
+    echo "  sudo bash master_setup.sh"
+    echo ""
+    echo "The script will automatically continue."
     echo ""
     
-    # Display passwords before reboot
     if [ -f "GENERATED_PASSWORDS.txt" ]; then
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "🔐 SAVE THESE PASSWORDS BEFORE REBOOTING:"
@@ -953,7 +996,9 @@ CONTINUE_SCRIPT
         sleep 5
         sudo reboot
     else
-        echo "Please reboot manually and then run: sudo ./scripts/00_continue_setup.sh"
+        echo ""
+        echo "Please reboot manually, then run:"
+        echo "  cd $INSTALL_DIR && sudo bash master_setup.sh"
     fi
     exit 0
 fi
@@ -971,7 +1016,6 @@ echo "Step 3: Certificate Setup"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 ./scripts/03_certificate_setup.sh
 
-# Check for existing cert mode
 if [ "$CERT_MODE" = "existing" ]; then
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -986,17 +1030,16 @@ if [ "$CERT_MODE" = "existing" ]; then
     echo "║     ⚠️  ACTION REQUIRED: CERTIFICATES       ║"
     echo "╚══════════════════════════════════════════════╝"
     echo ""
-    echo "CSRs have been generated in: certificates/csr/"
+    echo "CSRs generated in: certificates/csr/"
     echo ""
     echo "Please:"
-    echo "1. Submit CSRs to your Certificate Authority"
+    echo "1. Submit CSRs to your CA"
     echo "2. Place signed certificates in: certificates/ssl/"
     [ "${INSTALL_OXIDIZED}" = "true" ] && echo "   - ${OXIDIZED_DOMAIN}.crt"
     [ "${INSTALL_GITLAB}" = "true" ] && echo "   - ${GITLAB_DOMAIN}.crt"
     echo ""
-    read -p "Press ENTER when certificates are in place..."
+    read -p "Press ENTER when certificates are ready..."
     
-    # Verify certificates loop
     echo ""
     echo "Verifying certificates..."
     while true; do
@@ -1006,12 +1049,6 @@ if [ "$CERT_MODE" = "existing" ]; then
         else
             echo ""
             echo -e "${RED}❌ Certificate verification failed${NC}"
-            echo ""
-            echo "Required files:"
-            [ "${INSTALL_OXIDIZED}" = "true" ] && echo "  certificates/ssl/${OXIDIZED_DOMAIN}.crt"
-            [ "${INSTALL_OXIDIZED}" = "true" ] && echo "  certificates/ssl/${OXIDIZED_DOMAIN}.key"
-            [ "${INSTALL_GITLAB}" = "true" ] && echo "  certificates/ssl/${GITLAB_DOMAIN}.crt"
-            [ "${INSTALL_GITLAB}" = "true" ] && echo "  certificates/ssl/${GITLAB_DOMAIN}.key"
             echo ""
             read -p "Press ENTER to verify again..."
         fi
@@ -1043,7 +1080,6 @@ echo ""
 echo "Waiting for services to start (60 seconds)..."
 sleep 60
 
-# GitLab integration if both services
 if [ "${INSTALL_GITLAB}" = "true" ] && [ "${INSTALL_OXIDIZED}" = "true" ]; then
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -1073,7 +1109,7 @@ if [ -f "GENERATED_PASSWORDS.txt" ]; then
     echo "⚠️  IMPORTANT SECURITY NOTICE:"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "📝 Passwords saved in: $INSTALL_DIR/GENERATED_PASSWORDS.txt"
+    echo "📝 Saved in: $INSTALL_DIR/GENERATED_PASSWORDS.txt"
     echo ""
     echo "⚠️  PLEASE:"
     echo "   1. Save these passwords in a secure location"
@@ -1098,6 +1134,7 @@ echo "╚═══════════════════════�
 echo ""
 echo "📁 Installation Directory: $INSTALL_DIR"
 echo "📋 Setup Log: $SETUP_LOG"
+echo "📋 Configuration Summary: $CONFIG_SUMMARY"
 echo ""
 echo "🌐 Services:"
 [ "${INSTALL_OXIDIZED}" = "true" ] && echo "  • Oxidized: https://${OXIDIZED_DOMAIN}"
