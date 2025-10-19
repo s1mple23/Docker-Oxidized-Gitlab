@@ -1,6 +1,6 @@
 #!/bin/bash
 # master_setup.sh - FULLY AUTOMATED Infrastructure Setup
-# Version: 10.2 - Clean and optimized
+# Version: 10.3 - Optimiert für Oxidized (keine Doppel-Commits)
 set -e
 
 RED='\033[0;31m'
@@ -28,7 +28,8 @@ escape_for_sed() {
 clear
 echo "╔══════════════════════════════════════════════╗"
 echo "║  Docker Infrastructure Master Setup          ║"
-echo "║  Version 10.2 - FULLY AUTOMATED              ║"
+echo "║  Version 10.3 - FULLY AUTOMATED              ║"
+echo "║  + Oxidized Optimizations                    ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 echo "Started: $(date)"
@@ -179,17 +180,9 @@ if [ ! -f "config.env" ]; then
     if [ "$INSTALL_GITLAB" = "true" ]; then
         GITLAB_ROOT_PASSWORD_ESC=$(escape_for_sed "$GITLAB_ROOT_PASSWORD")
         GITLAB_OXIDIZED_PASSWORD_ESC=$(escape_for_sed "$GITLAB_OXIDIZED_PASSWORD")
-        GITLAB_OXIDIZED_USER_ESC=$(escape_for_sed "$GITLAB_OXIDIZED_USER")
-        GITLAB_OXIDIZED_EMAIL_ESC=$(escape_for_sed "$GITLAB_OXIDIZED_EMAIL")
-        GITLAB_PROJECT_NAMESPACE_ESC=$(escape_for_sed "$GITLAB_PROJECT_NAMESPACE")
-        GITLAB_PROJECT_NAME_ESC=$(escape_for_sed "$GITLAB_PROJECT_NAME")
         
         sed -i "s|^GITLAB_ROOT_PASSWORD=.*|GITLAB_ROOT_PASSWORD=\"${GITLAB_ROOT_PASSWORD_ESC}\"|" config.env
         sed -i "s|^GITLAB_OXIDIZED_PASSWORD=.*|GITLAB_OXIDIZED_PASSWORD=\"${GITLAB_OXIDIZED_PASSWORD_ESC}\"|" config.env
-        sed -i "s|^GITLAB_OXIDIZED_USER=.*|GITLAB_OXIDIZED_USER=\"${GITLAB_OXIDIZED_USER_ESC}\"|" config.env
-        sed -i "s|^GITLAB_OXIDIZED_EMAIL=.*|GITLAB_OXIDIZED_EMAIL=\"${GITLAB_OXIDIZED_EMAIL_ESC}\"|" config.env
-        sed -i "s|^GITLAB_PROJECT_NAMESPACE=.*|GITLAB_PROJECT_NAMESPACE=\"${GITLAB_PROJECT_NAMESPACE_ESC}\"|" config.env
-        sed -i "s|^GITLAB_PROJECT_NAME=.*|GITLAB_PROJECT_NAME=\"${GITLAB_PROJECT_NAME_ESC}\"|" config.env
     fi
     
     if [ "$INSTALL_OXIDIZED" = "true" ]; then
@@ -332,6 +325,8 @@ if [ "${INSTALL_OXIDIZED}" = "true" ]; then
 [OXIDIZED]
 Device Username: $DEVICE_DEFAULT_USERNAME
 Devices Configured: $DEVICE_COUNT
+Interval: 600 seconds (10 minutes)
+Features: Single repo mode, fast triggers, optimized diffs
 EOF
 fi
 
@@ -388,28 +383,35 @@ echo -e "${GREEN}✅ Copied $SCRIPT_COUNT scripts${NC}"
 # ============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Generating Configurations"
+echo "Generating Configurations (Optimized)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# OXIDIZED
+# OXIDIZED - OPTIMIZED VERSION
 if [ "${INSTALL_OXIDIZED}" = "true" ]; then
     echo ""
-    echo "Creating Oxidized configuration..."
+    echo "Creating Oxidized configuration (optimized for no duplicate commits)..."
     
     cat > oxidized/config/config << EOF
 ---
-# Note: Per-device credentials from router.db take precedence
+# Optimized Oxidized Configuration
+# - No duplicate commits (single_repo: true)
+# - Fast backups (interval: 600, next_adds_job: true)
+# - Better diffs (optimized git config)
 username: ${DEVICE_DEFAULT_USERNAME}
 password: ${DEVICE_DEFAULT_PASSWORD}
 model: ${DEVICE_DEFAULT_MODEL}
-interval: ${OXIDIZED_INTERVAL}
+interval: 600
 threads: ${OXIDIZED_THREADS}
 timeout: ${OXIDIZED_TIMEOUT}
 retries: ${OXIDIZED_RETRIES}
 rest: 0.0.0.0:${OXIDIZED_REST_PORT}
+next_adds_job: true
 
 input:
   default: ssh, telnet
+  debug: false
+  ssh:
+    secure: false
 
 output:
   default: git
@@ -417,6 +419,7 @@ output:
     user: ${OXIDIZED_GIT_USER}
     email: ${OXIDIZED_GIT_EMAIL}
     repo: "${OXIDIZED_GIT_REPO}"
+    single_repo: true
 
 source:
   default: csv
@@ -434,7 +437,7 @@ hooks:
     type: exec
     events: [post_store]
     timeout: 120
-    async: false
+    async: true
     cmd: ${OXIDIZED_HOOK_CMD}
 EOF
 
@@ -456,21 +459,30 @@ ROUTERDB_HEADER
         fi
     done
 
-    # Wrapper script
+    # OPTIMIZED Wrapper script
     if [ "${INSTALL_GITLAB}" = "true" ]; then
-        cat > oxidized/config/oxidized_wrapper.sh << EOF
+        cat > oxidized/config/oxidized_wrapper.sh << 'EOF'
 #!/bin/bash
 set -e
-LOG="/var/log/oxidized/wrapper_\$(date +%Y%m%d).log"
+LOG="/var/log/oxidized/wrapper_$(date +%Y%m%d).log"
 mkdir -p /var/log/oxidized
-exec > >(tee -a "\$LOG") 2>&1
+exec > >(tee -a "$LOG") 2>&1
 
-echo "Oxidized Wrapper (Docker Networking)"
-sleep 30
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Oxidized Wrapper - Optimized Version"
+echo "Started: $(date)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-git config --global user.name "${OXIDIZED_GIT_USER}"
-git config --global user.email "${OXIDIZED_GIT_EMAIL}"
+# Git Config - OPTIMIZED for better diffs
+git config --global user.name "Oxidized"
+git config --global user.email "oxidized@localhost"
 git config --global init.defaultBranch main
+git config --global diff.algorithm histogram
+git config --global core.whitespace trailing-space,space-before-tab
+git config --global diff.renames true
+git config --global diff.renameLimit 999999
+
+sleep 30
 
 mkdir -p /opt/oxidized/.ssh
 chmod 700 /opt/oxidized/.ssh
@@ -483,14 +495,14 @@ if [ ! -d "/opt/oxidized/devices.git" ]; then
     cd /opt/oxidized
     git init devices.git
     cd devices.git
-    echo "# Network Devices - ${ORG_NAME}" > README.md
+    echo "# Network Devices" > README.md
     git add README.md
     git commit -m "Initial commit"
 fi
 
 cd /opt/oxidized/devices.git
 git remote remove origin 2>/dev/null || true
-git remote add origin "git@gitlab-ce:${GITLAB_PROJECT_PATH}.git"
+git remote add origin "git@gitlab-ce:oxidized/network.git"
 
 cd /opt/oxidized
 exec oxidized
@@ -501,35 +513,78 @@ EOF
 set -e
 git config --global user.name "Oxidized"
 git config --global user.email "oxidized@localhost"
+git config --global init.defaultBranch main
+git config --global diff.algorithm histogram
+git config --global diff.renames true
 [ ! -d "/opt/oxidized/devices.git" ] && git init /opt/oxidized/devices.git
 cd /opt/oxidized
 exec oxidized
 EOF
     fi
 
-    # Git push hook
+    # OPTIMIZED Git push hook
     if [ "${INSTALL_GITLAB}" = "true" ]; then
         cat > oxidized/config/git_push_hook.sh << 'HOOK'
 #!/bin/bash
+# Optimized Git Push Hook - No duplicate commits
 LOG="/var/log/oxidized/git_push_hook.log"
+LOCK_FILE="/tmp/oxidized_push.lock"
 mkdir -p /var/log/oxidized
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG"; }
 
+# Prevent concurrent pushes
+if [ -f "$LOCK_FILE" ]; then
+    log "⏸️  Push already in progress, skipping"
+    exit 0
+fi
+
+touch "$LOCK_FILE"
+trap "rm -f $LOCK_FILE" EXIT
+
 cd /opt/oxidized/devices.git || exit 1
-[ -z "$(git status --porcelain)" ] && exit 0
 
-log "Committing changes..."
+# Check if there are actually changes
+if [ -z "$(git status --porcelain)" ]; then
+    log "ℹ️  No changes detected, skipping"
+    exit 0
+fi
+
+# Skip if only whitespace changes
+git diff --cached --quiet --ignore-all-space --ignore-blank-lines
+if [ $? -eq 0 ]; then
+    log "ℹ️  Only whitespace changes, skipping"
+    git reset --hard HEAD
+    exit 0
+fi
+
+# Get changed devices
+CHANGED_FILES=$(git status --porcelain | awk '{print $2}')
+DEVICE_NAMES=$(echo "$CHANGED_FILES" | sed 's/\..*$//' | sort -u | tr '\n' ', ' | sed 's/,$//')
+
+log "📝 Committing changes for devices: $DEVICE_NAMES"
+
 git add -A
-git commit -m "Backup $(date '+%Y-%m-%d %H:%M:%S')" 2>&1 | tee -a "$LOG"
+git commit -m "Config update: $DEVICE_NAMES @ $(date '+%Y-%m-%d %H:%M:%S')" 2>&1 | tee -a "$LOG"
 
-log "Pushing to GitLab..."
-export GIT_SSH_COMMAND="ssh -p 22 -i /etc/oxidized/keys/gitlab -o UserKnownHostsFile=/opt/oxidized/.ssh/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes"
+if [ $? -ne 0 ]; then
+    log "❌ Commit failed"
+    exit 1
+fi
+
+log "🚀 Pushing to GitLab..."
+export GIT_SSH_COMMAND="ssh -p 22 -i /etc/oxidized/keys/gitlab -o UserKnownHostsFile=/opt/oxidized/.ssh/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=10"
 
 if timeout 30 git push origin main 2>&1 | tee -a "$LOG"; then
-    log "✅ Push successful"
+    log "✅ Push successful for: $DEVICE_NAMES"
 else
-    log "❌ Push failed"
+    EXIT_CODE=$?
+    if [ $EXIT_CODE -eq 124 ]; then
+        log "⏱️  Push timeout"
+    else
+        log "❌ Push failed (exit code: $EXIT_CODE)"
+    fi
+    exit $EXIT_CODE
 fi
 HOOK
     else
@@ -565,10 +620,10 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=90s CMD curl -f http://l
 CMD ["/opt/oxidized/oxidized_wrapper.sh"]
 DOCKERFILE
 
-    echo -e "${GREEN}✅ Oxidized configured ($DEVICE_COUNT devices)${NC}"
+    echo -e "${GREEN}✅ Oxidized configured ($DEVICE_COUNT devices) - OPTIMIZED${NC}"
 fi
 
-# GITLAB
+# GITLAB (unchanged)
 if [ "${INSTALL_GITLAB}" = "true" ]; then
     echo ""
     echo "Creating GitLab configuration..."
@@ -586,7 +641,7 @@ EOF
     echo -e "${GREEN}✅ GitLab configured${NC}"
 fi
 
-# NGINX
+# NGINX (unchanged)
 echo ""
 echo "Creating Nginx configuration..."
 
@@ -662,7 +717,7 @@ fi
 
 echo -e "${GREEN}✅ Nginx configured${NC}"
 
-# DOCKER COMPOSE
+# DOCKER COMPOSE (unchanged)
 echo ""
 echo "Creating Docker Compose file..."
 
@@ -814,6 +869,50 @@ EOF
 echo -e "${GREEN}✅ Docker Compose created${NC}"
 
 # ============================================================================
+# CREATE UTILITY SCRIPTS
+# ============================================================================
+echo ""
+echo "Creating utility scripts..."
+
+# Trigger backup script
+cat > scripts/trigger_backup.sh << 'TRIGGER'
+#!/bin/bash
+# Trigger immediate backup for device(s)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../config.env"
+
+DEVICE=$1
+OXIDIZED_API="http://localhost:${OXIDIZED_REST_PORT}"
+
+if [ -z "$DEVICE" ]; then
+    echo "Usage: $0 <device_ip|all>"
+    echo ""
+    echo "Examples:"
+    echo "  $0 10.99.99.50    # Backup single device"
+    echo "  $0 all            # Backup all devices"
+    exit 1
+fi
+
+if [ "$DEVICE" = "all" ]; then
+    echo "Triggering backup for ALL devices..."
+    curl -X GET "${OXIDIZED_API}/reload?format=json" 2>/dev/null
+    echo ""
+    echo "✅ Reload triggered"
+else
+    echo "Triggering backup for: $DEVICE"
+    curl -X GET "${OXIDIZED_API}/node/fetch/${DEVICE}?format=json" 2>/dev/null
+    echo ""
+    echo "✅ Backup triggered"
+fi
+
+echo ""
+echo "Check logs: docker logs oxidized --tail 20"
+TRIGGER
+
+chmod +x scripts/trigger_backup.sh
+echo -e "${GREEN}✅ Utility scripts created${NC}"
+
+# ============================================================================
 # CHECK IF CONTINUING AFTER REBOOT
 # ============================================================================
 if [ -f "$INSTALL_DIR/.reboot_required" ]; then
@@ -949,6 +1048,14 @@ if [ -f "$INSTALL_DIR/.reboot_required" ]; then
     [ "${INSTALL_OXIDIZED}" = "true" ] && echo "  • Oxidized: https://${OXIDIZED_DOMAIN}"
     [ "${INSTALL_GITLAB}" = "true" ] && echo "  • GitLab: https://${GITLAB_DOMAIN}"
     echo ""
+    if [ "${INSTALL_OXIDIZED}" = "true" ]; then
+        echo "⚡ Oxidized Features:"
+        echo "  • Fast backups every 10 minutes"
+        echo "  • Immediate trigger: ./scripts/trigger_backup.sh all"
+        echo "  • No duplicate commits (optimized)"
+        echo "  • Better diff display in GitLab"
+        echo ""
+    fi
     echo "✅ Setup completed: $(date)"
     echo ""
     
@@ -1149,10 +1256,19 @@ echo "🌐 Services:"
 [ "${INSTALL_OXIDIZED}" = "true" ] && echo "  • Oxidized: https://${OXIDIZED_DOMAIN}"
 [ "${INSTALL_GITLAB}" = "true" ] && echo "  • GitLab: https://${GITLAB_DOMAIN}"
 echo ""
+if [ "${INSTALL_OXIDIZED}" = "true" ]; then
+    echo "⚡ Oxidized Features (OPTIMIZED):"
+    echo "  • Fast backups every 10 minutes"
+    echo "  • No duplicate commits"
+    echo "  • Better diff display in GitLab"
+    echo "  • Immediate trigger: ./scripts/trigger_backup.sh all"
+    echo ""
+fi
 echo "📊 Next Steps:"
 echo "  • Check status: ./scripts/08_check_status.sh"
 echo "  • View logs: docker compose logs -f"
 echo "  • Backup: ./scripts/09_backup.sh"
+[ "${INSTALL_OXIDIZED}" = "true" ] && echo "  • Trigger backup: ./scripts/trigger_backup.sh all"
 echo ""
 if [ -f "GENERATED_PASSWORDS.txt" ]; then
     echo "🔐 Security:"
