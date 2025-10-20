@@ -596,16 +596,21 @@ sudo bash master_setup.sh  # Uses existing config, only updates changed parts
 
 **Method 2: Manual edit and rebuild**
 ```bash
-# Edit router.db directly
-docker exec -it oxidized nano /opt/oxidized/router.db
+# Edit router.db on the host system
+cd /opt/docker-infrastructure
+nano oxidized/config/router.db
 
 # Add line:
 # 192.168.1.5:ios:admin:password:
 
-# Reload Oxidized
-docker compose restart oxidized
+# Rebuild container to pick up changes
+docker compose down oxidized
+docker compose up -d oxidized
 
-# Or trigger backup immediately
+# Wait for Oxidized to start (about 30 seconds)
+sleep 30
+
+# Trigger backup immediately
 ./scripts/trigger_backup.sh all
 ```
 
