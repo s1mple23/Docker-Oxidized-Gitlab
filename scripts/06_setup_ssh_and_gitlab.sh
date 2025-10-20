@@ -1,6 +1,6 @@
 #!/bin/bash
 # 06_setup_ssh_and_gitlab.sh - GitLab Integration (Manual Setup)
-# Simple and reliable: Manual configuration via GitLab UI
+# FIXED: Permission errors beim SSH Key Generation
 
 set -e
 
@@ -46,37 +46,55 @@ else
 fi
 
 # ============================================================================
-# STEP 2: Generate SSH Keys
+# STEP 2: Generate SSH Keys - FIXED VERSION
 # ============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 2: Generating SSH Keys"
+echo "Step 2: Generating SSH Keys (Fixed)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-docker exec oxidized bash -c "
-mkdir -p /etc/oxidized/keys
-chmod 700 /etc/oxidized/keys
+# Create keys directory on host FIRST
+mkdir -p "${INSTALL_DIR}/oxidized/keys"
+chmod 755 "${INSTALL_DIR}/oxidized/keys"
 
-if [ ! -f /etc/oxidized/keys/gitlab ]; then
-    echo 'Generating SSH key pair...'
-    ssh-keygen -t ${SSH_KEY_TYPE} -f /etc/oxidized/keys/gitlab -N '' -C '${OXIDIZED_GIT_EMAIL}'
-    echo '✅ SSH key pair generated'
+# Generate keys on HOST, not in container
+if [ ! -f "${INSTALL_DIR}/oxidized/keys/gitlab" ]; then
+    echo "Generating SSH key pair on host..."
+    
+    # Generate on host
+    ssh-keygen -t ${SSH_KEY_TYPE} \
+        -f "${INSTALL_DIR}/oxidized/keys/gitlab" \
+        -N '' \
+        -C "${OXIDIZED_GIT_EMAIL}"
+    
+    # Set correct permissions
+    chmod 600 "${INSTALL_DIR}/oxidized/keys/gitlab"
+    chmod 644 "${INSTALL_DIR}/oxidized/keys/gitlab.pub"
+    
+    echo "✅ SSH key pair generated on host"
 else
-    echo '✅ SSH key pair already exists'
+    echo "✅ SSH key pair already exists"
 fi
+
+# Now copy to container volume
+echo "Copying keys to container..."
+docker cp "${INSTALL_DIR}/oxidized/keys/gitlab" oxidized:/etc/oxidized/keys/gitlab
+docker cp "${INSTALL_DIR}/oxidized/keys/gitlab.pub" oxidized:/etc/oxidized/keys/gitlab.pub
+
+# Set permissions in container
+docker exec oxidized bash -c "
+chmod 700 /etc/oxidized/keys
+chmod 600 /etc/oxidized/keys/gitlab
+chmod 644 /etc/oxidized/keys/gitlab.pub
+chown -R oxidized:oxidized /etc/oxidized/keys
 "
 
-# Copy keys to host
-mkdir -p "${INSTALL_DIR}/oxidized/keys"
-docker cp oxidized:/etc/oxidized/keys/gitlab "${INSTALL_DIR}/oxidized/keys/" 2>/dev/null || true
-docker cp oxidized:/etc/oxidized/keys/gitlab.pub "${INSTALL_DIR}/oxidized/keys/" 2>/dev/null || true
-chmod 600 "${INSTALL_DIR}/oxidized/keys/gitlab"
-chmod 644 "${INSTALL_DIR}/oxidized/keys/gitlab.pub"
+echo "✅ Keys copied to container"
 
 PUBLIC_KEY=$(cat "${INSTALL_DIR}/oxidized/keys/gitlab.pub")
 
 echo ""
-echo "✅ SSH keys generated"
+echo "✅ SSH keys generated and configured"
 echo ""
 
 # ============================================================================
@@ -353,43 +371,4 @@ echo ""
 echo "📋 Log saved to: $LOG_FILE"
 echo ""
 echo "Setup completed: $(date)"
-echo ""
-lear"
-    echo ""
-    echo "Please check GitLab manually at:"
-    echo "  https://${GITLAB_DOMAIN}/${GITLAB_PROJECT_PATH}"
-    echo ""
-    echo "If the project exists and you can see commits, everything is working!"
-fi
-
-# ============================================================================
-# FINAL SUMMARY
-# ============================================================================
-echo ""
-echo "╔══════════════════════════════════════════════╗"
-echo "║     GitLab Integration Setup Complete        ║"
-echo "╚══════════════════════════════════════════════╝"
-echo ""
-echo "📋 Configuration:"
-echo "  GitLab URL: https://${GITLAB_DOMAIN}"
-echo "  Oxidized User: ${GITLAB_OXIDIZED_USER}"
-echo "  Oxidized Password: ${GITLAB_OXIDIZED_PASSWORD}"
-echo "  Project: ${GITLAB_PROJECT_PATH}"
-echo "  Project URL: https://${GITLAB_DOMAIN}/${GITLAB_PROJECT_PATH}"
-echo ""
-echo "🔐 SSH Key Location:"
-echo "  Public: ${INSTALL_DIR}/oxidized/keys/gitlab.pub"
-echo "  Private: ${INSTALL_DIR}/oxidized/keys/gitlab"
-echo ""
-echo "📁 Git Repository:"
-echo "  Local: /opt/oxidized/devices.git (inside container)"
-echo "  Remote: git@gitlab-ce:${GITLAB_PROJECT_PATH}.git"
-echo ""
-echo "🔍 Verify Setup:"
-echo "  docker exec oxidized git -C /opt/oxidized/devices.git remote -v"
-echo "  docker exec oxidized git -C /opt/oxidized/devices.git log"
-echo ""
-echo "📋 Log: $LOG_FILE"
-echo ""
-echo "✅ Setup completed: $(date)"
 echo ""
