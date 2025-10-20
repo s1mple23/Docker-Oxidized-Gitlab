@@ -220,22 +220,36 @@ fi
 echo ""
 echo "Configuring Git repository..."
 
-docker exec oxidized bash -c "
-# Initialize repository if needed
-if [ ! -d '/opt/oxidized/devices.git' ]; then
+# Check if repo already exists
+REPO_EXISTS=$(docker exec oxidized bash -c "[ -d '/opt/oxidized/devices.git' ] && echo 'yes' || echo 'no'")
+
+if [ "$REPO_EXISTS" = "no" ]; then
+    echo "Initializing new Git repository..."
+    docker exec oxidized bash -c "
     cd /opt/oxidized
     git init devices.git
     cd devices.git
-    echo '# Network Device Configurations' > README.md
+    echo '# Network Device Configurations - ${ORG_NAME}' > README.md
+    echo '' >> README.md
+    echo 'This repository contains automated backups of network device configurations.' >> README.md
+    echo '' >> README.md
+    echo '## Automated by Oxidized' >> README.md
+    echo '- Backup interval: Every 10 minutes' >> README.md
+    echo '- Commits show only actual configuration changes' >> README.md
+    echo '- Each commit message includes device name and timestamp' >> README.md
     git add README.md
     git config user.name '${OXIDIZED_GIT_USER}'
     git config user.email '${OXIDIZED_GIT_EMAIL}'
-    git commit -m 'Initial commit'
+    git commit -m 'Initial repository setup by Oxidized'
+    "
+    echo "✅ Git repository initialized"
+else
+    echo "✅ Git repository already exists"
 fi
 
-cd /opt/oxidized/devices.git
-
 # Configure remote
+docker exec oxidized bash -c "
+cd /opt/oxidized/devices.git
 git config user.name '${OXIDIZED_GIT_USER}'
 git config user.email '${OXIDIZED_GIT_EMAIL}'
 git remote remove origin 2>/dev/null || true
@@ -245,63 +259,196 @@ git remote add origin 'git@gitlab-ce:${GITLAB_PROJECT_PATH}.git'
 echo "✅ Git remote configured"
 
 # ============================================================================
-# STEP 6: Test Push
+# STEP 6: Test SSH Connection and Initial Push
 # ============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Testing Push to GitLab..."
+echo "Testing SSH Connection and Initial Push"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+# First, test SSH connection
+echo "Step 6.1: Testing SSH connection to GitLab..."
+SSH_TEST=$(docker exec oxidized bash -c "
+ssh -p 22 -i /etc/oxidized/keys/gitlab \
+    -o UserKnownHostsFile=/opt/oxidized/.ssh/known_hosts \
+    -o StrictHostKeyChecking=yes \
+    -o BatchMode=yes \
+    -o ConnectTimeout=10 \
+    -T git@gitlab-ce 2>&1
+" || true)
+
+echo "$SSH_TEST"
+
+if echo "$SSH_TEST" | grep -qE "(Welcome to GitLab|successfully authenticated)"; then
+    echo ""
+    echo "✅ SSH connection successful!"
+    echo ""
+elif echo "$SSH_TEST" | grep -q "Permission denied"; then
+    echo ""
+    echo "❌ SSH connection failed: Permission denied"
+    echo ""
+    echo "Please check:"
+    echo "  • Deploy key was added in GitLab"
+    echo "  • 'Grant write permissions' was checked"
+    echo "  • The correct public key was used"
+    echo ""
+    echo "Public key location:"
+    echo "  In container: /etc/oxidized/keys/gitlab.pub"
+    echo "  On host: ${INSTALL_DIR}/oxidized/keys/gitlab.pub"
+    echo ""
+    echo "Public key content:"
+    echo "${PUBLIC_KEY}"
+    echo ""
+    read -p "Fix the issue in GitLab and press ENTER to retry..."
+    
+    # Retry SSH test
+    SSH_TEST=$(docker exec oxidized bash -c "
+    ssh -p 22 -i /etc/oxidized/keys/gitlab \
+        -o UserKnownHostsFile=/opt/oxidized/.ssh/known_hosts \
+        -o StrictHostKeyChecking=yes \
+        -o BatchMode=yes \
+        -o ConnectTimeout=10 \
+        -T git@gitlab-ce 2>&1
+    " || true)
+    
+    if ! echo "$SSH_TEST" | grep -qE "(Welcome to GitLab|successfully authenticated)"; then
+        echo "❌ SSH still not working. Please check the configuration manually."
+        SETUP_SUCCESS=false
+    fi
+else
+    echo ""
+    echo "⚠️  SSH connection test inconclusive (this can be normal)"
+    echo "    Proceeding with push test..."
+    echo ""
+fi
+
+# Now attempt the initial push
+echo "Step 6.2: Performing initial push to GitLab..."
 echo ""
 
 PUSH_OUTPUT=$(docker exec oxidized bash -c "
 cd /opt/oxidized/devices.git
-export GIT_SSH_COMMAND='ssh -p 22 -i /etc/oxidized/keys/gitlab -o UserKnownHostsFile=/opt/oxidized/.ssh/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes'
+
+# Set SSH command
+export GIT_SSH_COMMAND='ssh -p 22 -i /etc/oxidized/keys/gitlab -o UserKnownHostsFile=/opt/oxidized/.ssh/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=30'
+
+# Check if we have commits to push
+if [ -z \"\$(git log 2>/dev/null)\" ]; then
+    echo 'ERROR: No commits in local repository'
+    exit 1
+fi
+
+# Check current remote
+echo 'Current remote:'
+git remote -v
+
+# Try to push
+echo ''
+echo 'Attempting push...'
 git push -u origin main 2>&1
 " || true)
 
+echo "Push output:"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "$PUSH_OUTPUT"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-if echo "$PUSH_OUTPUT" | grep -qE "(main -> main|Everything up-to-date|branch 'main' set up)"; then
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "✅ SUCCESS! Push to GitLab was successful!"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+# Analyze push result
+if echo "$PUSH_OUTPUT" | grep -qE "(main -> main|branch 'main' set up|new branch)"; then
+    echo "✅ SUCCESS! Initial push completed successfully!"
     echo ""
-    echo "🎉 GitLab integration is working correctly!"
+    echo "🎉 GitLab integration is fully working!"
     echo ""
-    echo "Your network device backups will now be automatically"
-    echo "pushed to GitLab every time Oxidized runs."
+    echo "Verification:"
+    echo "  • Local commits were pushed to GitLab"
+    echo "  • Branch 'main' is tracking 'origin/main'"
+    echo "  • SSH authentication working"
+    echo ""
+    echo "Check in GitLab: https://${GITLAB_DOMAIN}/${GITLAB_PROJECT_PATH}"
     echo ""
     SETUP_SUCCESS=true
+    
+elif echo "$PUSH_OUTPUT" | grep -q "Everything up-to-date"; then
+    echo "✅ Push successful (repository was already up-to-date)"
+    echo ""
+    echo "🎉 GitLab integration is working!"
+    echo ""
+    SETUP_SUCCESS=true
+    
 elif echo "$PUSH_OUTPUT" | grep -q "Permission denied"; then
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "❌ FAILED: Permission Denied"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "Please check:"
-    echo "  • Deploy key was added correctly"
-    echo "  • 'Grant write permissions' was checked"
-    echo "  • The key matches: ${INSTALL_DIR}/oxidized/keys/gitlab.pub"
+    echo "The SSH key is not authorized or doesn't have write permissions."
     echo ""
-    SETUP_SUCCESS=false
-elif echo "$PUSH_OUTPUT" | grep -q "repository not found"; then
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "❌ FAILED: Repository Not Found"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Please verify in GitLab:"
+    echo "  1. Go to: https://${GITLAB_DOMAIN}/${GITLAB_PROJECT_PATH}/-/settings/repository"
+    echo "  2. Expand 'Deploy Keys'"
+    echo "  3. Check that 'Oxidized Backup Key' is listed"
+    echo "  4. Verify that 'Write access allowed' is checked"
     echo ""
-    echo "Please check:"
-    echo "  • Project exists at: https://${GITLAB_DOMAIN}/${GITLAB_PROJECT_PATH}"
-    echo "  • You are logged in as '${GITLAB_OXIDIZED_USER}'"
-    echo "  • Project was initialized with README"
+    echo "Public key (should match):"
+    echo "${PUBLIC_KEY}"
+    echo ""
+    echo "Debugging:"
+    echo "  • Check key in container: docker exec oxidized cat /etc/oxidized/keys/gitlab.pub"
+    echo "  • Check permissions: docker exec oxidized ls -la /etc/oxidized/keys/"
     echo ""
     SETUP_SUCCESS=false
+    
+elif echo "$PUSH_OUTPUT" | grep -qE "(repository not found|does not appear to be a git repository|Could not read from remote)"; then
+    echo "❌ FAILED: Repository Not Found or Not Accessible"
+    echo ""
+    echo "The GitLab project might not exist or isn't configured correctly."
+    echo ""
+    echo "Please verify:"
+    echo "  1. Project exists: https://${GITLAB_DOMAIN}/${GITLAB_PROJECT_PATH}"
+    echo "  2. You're logged in as: ${GITLAB_OXIDIZED_USER}"
+    echo "  3. Project was initialized with README"
+    echo "  4. Project visibility is set (Private recommended)"
+    echo ""
+    SETUP_SUCCESS=false
+    
+elif echo "$PUSH_OUTPUT" | grep -q "Connection refused\|timed out\|Could not resolve hostname"; then
+    echo "❌ FAILED: Network/Connection Error"
+    echo ""
+    echo "Cannot reach GitLab container."
+    echo ""
+    echo "Please check:"
+    echo "  • GitLab container is running: docker ps | grep gitlab"
+    echo "  • Docker network is working: docker network ls | grep gitlabnet"
+    echo "  • Containers can communicate:"
+    echo "    docker exec oxidized ping -c 3 gitlab-ce"
+    echo ""
+    SETUP_SUCCESS=false
+    
+elif echo "$PUSH_OUTPUT" | grep -q "rejected\|failed to push"; then
+    echo "❌ FAILED: Push Rejected"
+    echo ""
+    echo "The push was rejected by GitLab."
+    echo ""
+    echo "Common causes:"
+    echo "  • Remote has commits that aren't in local repo"
+    echo "  • Branch protection rules enabled"
+    echo ""
+    echo "Try manually:"
+    echo "  docker exec oxidized bash"
+    echo "  cd /opt/oxidized/devices.git"
+    echo "  git pull origin main"
+    echo "  git push origin main"
+    echo ""
+    SETUP_SUCCESS=false
+    
 else
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "⚠️  WARNING: Unexpected Result"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "⚠️  Push completed with unexpected output"
     echo ""
-    echo "Please verify manually at:"
-    echo "  https://${GITLAB_DOMAIN}/${GITLAB_PROJECT_PATH}"
+    echo "Please verify manually:"
+    echo "  1. Go to: https://${GITLAB_DOMAIN}/${GITLAB_PROJECT_PATH}"
+    echo "  2. Check if you can see commits"
+    echo "  3. Look for 'Initial repository setup by Oxidized' commit"
+    echo ""
+    echo "If you see the commit, everything is working!"
     echo ""
     SETUP_SUCCESS=false
 fi

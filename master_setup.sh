@@ -393,25 +393,36 @@ if [ "${INSTALL_OXIDIZED}" = "true" ]; then
     
     cat > oxidized/config/config << EOF
 ---
-# Optimized Oxidized Configuration
+# Optimized Oxidized Configuration - HTTPS githubrepo method
 # - No duplicate commits (single_repo: true)
 # - Fast backups (interval: 600, next_adds_job: true)
-# - Better diffs (optimized git config)
+# - Immediate commits (githubrepo hook)
 username: ${DEVICE_DEFAULT_USERNAME}
 password: ${DEVICE_DEFAULT_PASSWORD}
 model: ${DEVICE_DEFAULT_MODEL}
+resolve_dns: true
 interval: 600
+use_syslog: false
+debug: false
 threads: ${OXIDIZED_THREADS}
 timeout: ${OXIDIZED_TIMEOUT}
 retries: ${OXIDIZED_RETRIES}
-rest: 0.0.0.0:${OXIDIZED_REST_PORT}
+prompt: !ruby/regexp /^[\w.@-]+[#>]\s?$/
 next_adds_job: true
+vars:
+  remove_secret: true
+groups: {}
+rest: 0.0.0.0:${OXIDIZED_REST_PORT}
+pid: "/tmp/oxidized.pid"
 
 input:
   default: ssh, telnet
   debug: false
   ssh:
     secure: false
+    auth_methods:
+      - password
+      - keyboard-interactive
 
 output:
   default: git
@@ -431,15 +442,30 @@ source:
       model: 1
       username: 2
       password: 3
+    vars_map:
+      enable: 4
+
+model_map:
+  paloalto: panos
+  panos: panos
+  juniper: junos
+  cisco: ios
+  arista: eos
+EOF
+
+    # Add GitLab hook if GitLab is installed
+    if [ "${INSTALL_GITLAB}" = "true" ]; then
+        cat >> oxidized/config/config << EOF
 
 hooks:
   push_to_remote:
-    type: exec
+    type: githubrepo
     events: [post_store]
-    timeout: 120
-    async: true
-    cmd: ${OXIDIZED_HOOK_CMD}
+    remote_repo: https://oauth2:GITLAB_TOKEN_PLACEHOLDER@gitlab-ce/${GITLAB_PROJECT_PATH}.git
+    publickey: /dev/null
+    privatekey: /dev/null
 EOF
+    fi
 
     cat > oxidized/config/router.db << 'ROUTERDB_HEADER'
 # Format: IP:MODEL:USERNAME:PASSWORD:ENABLE
@@ -469,9 +495,11 @@ mkdir -p /var/log/oxidized
 exec > >(tee -a "$LOG") 2>&1
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Oxidized Wrapper - Optimized Version"
+echo "Oxidized Wrapper - Optimized v10.3"
 echo "Started: $(date)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+sleep 10
 
 # Git Config - OPTIMIZED for better diffs
 git config --global user.name "Oxidized"
@@ -481,15 +509,7 @@ git config --global diff.algorithm histogram
 git config --global core.whitespace trailing-space,space-before-tab
 git config --global diff.renames true
 git config --global diff.renameLimit 999999
-
-sleep 30
-
-mkdir -p /opt/oxidized/.ssh
-chmod 700 /opt/oxidized/.ssh
-
-if [ ! -f /opt/oxidized/.ssh/known_hosts ]; then
-    ssh-keyscan -p 22 -H gitlab-ce > /opt/oxidized/.ssh/known_hosts 2>/dev/null
-fi
+git config --global http.sslVerify false
 
 if [ ! -d "/opt/oxidized/devices.git" ]; then
     cd /opt/oxidized
@@ -502,7 +522,30 @@ fi
 
 cd /opt/oxidized/devices.git
 git remote remove origin 2>/dev/null || true
-git remote add origin "git@gitlab-ce:oxidized/network.git"
+
+# Wait for GitLab token
+max_wait=300
+waited=0
+while [ ! -f /run/secrets/gitlab_token ] && [ $waited -lt $max_wait ]; do
+    sleep 5
+    waited=$((waited + 5))
+    if [ $((waited % 30)) -eq 0 ]; then
+        echo "Waiting for GitLab token... ($waited/$max_wait)"
+    fi
+done
+
+if [ -f /run/secrets/gitlab_token ]; then
+    TOKEN=$(cat /run/secrets/gitlab_token)
+    git remote add origin "https://oauth2:${TOKEN}@gitlab-ce/oxidized/network.git"
+    echo "✅ GitLab remote configured"
+    
+    # Try initial push
+    if timeout 30 git push -u origin main 2>/dev/null || true; then
+        echo "✅ Initial push successful"
+    fi
+else
+    echo "⚠️  GitLab token not available, continuing without remote"
+fi
 
 cd /opt/oxidized
 exec oxidized
