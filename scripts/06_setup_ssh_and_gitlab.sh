@@ -1,6 +1,6 @@
 #!/bin/bash
-# 06_setup_ssh_and_gitlab.sh - GitLab Integration (Manual Setup)
-# FIXED: Permission errors beim SSH Key Generation
+# 06_setup_ssh_and_gitlab.sh - GitLab SSH Integration (NO TOKEN)
+# Pure SSH with Deploy Key authentication
 
 set -e
 
@@ -16,7 +16,7 @@ LOG_FILE="${LOG_DIR}/06_ssh_gitlab_$(date +%Y%m%d_%H%M%S).log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 echo "=========================================="
-echo "06 - GitLab Integration Setup"
+echo "06 - GitLab SSH Integration (Deploy Key)"
 echo "=========================================="
 
 cd "${INSTALL_DIR}"
@@ -38,7 +38,7 @@ else
     echo "✅ GitLab is running"
 fi
 
-# Check if Oxidized is configured (doesn't need to be running yet)
+# Check if Oxidized is configured
 if [ ! -f "oxidized/config/config" ]; then
     echo "❌ Oxidized config not found!"
     echo "Please run master_setup.sh first"
@@ -47,16 +47,8 @@ else
     echo "✅ Oxidized is configured"
 fi
 
-OXIDIZED_RUNNING=false
-if docker ps | grep -q "oxidized"; then
-    echo "✅ Oxidized is running"
-    OXIDIZED_RUNNING=true
-else
-    echo "ℹ️  Oxidized not yet started (will be started after token setup)"
-fi
-
 # ============================================================================
-# STEP 2: Generate SSH Keys - WORKING VERSION
+# STEP 2: Generate SSH Keys on Host
 # ============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -80,7 +72,7 @@ else
     echo "✅ SSH key pair already exists"
 fi
 
-# Set permissions on host (the directory is mounted as volume)
+# Set permissions on host
 chmod 700 "${INSTALL_DIR}/oxidized/keys" 2>/dev/null || true
 chmod 600 "${INSTALL_DIR}/oxidized/keys/gitlab" 2>/dev/null || true
 chmod 644 "${INSTALL_DIR}/oxidized/keys/gitlab.pub" 2>/dev/null || true
@@ -88,7 +80,7 @@ chmod 644 "${INSTALL_DIR}/oxidized/keys/gitlab.pub" 2>/dev/null || true
 PUBLIC_KEY=$(cat "${INSTALL_DIR}/oxidized/keys/gitlab.pub")
 
 echo ""
-echo "✅ SSH keys generated and configured"
+echo "✅ SSH keys ready"
 echo ""
 
 # ============================================================================
@@ -99,6 +91,7 @@ echo ""
 echo "╔══════════════════════════════════════════════════════════════════╗"
 echo "║                                                                  ║"
 echo "║           MANUAL GITLAB CONFIGURATION REQUIRED                   ║"
+echo "║           SSH Authentication with Deploy Key                     ║"
 echo "║                                                                  ║"
 echo "╚══════════════════════════════════════════════════════════════════╝"
 echo ""
@@ -133,12 +126,11 @@ echo "     Email: ${GITLAB_OXIDIZED_EMAIL}"
 echo ""
 echo "  5. IMPORTANT: Uncheck 'Send password reset email'"
 echo "  6. Click 'Create user'"
-echo "  7. You'll see a success message"
-echo "  8. Click 'Edit' on the newly created user"
-echo "  9. Scroll down to 'Password' section"
-echo "  10. Enter password: ${GITLAB_OXIDIZED_PASSWORD}"
-echo "  11. Confirm password: ${GITLAB_OXIDIZED_PASSWORD}"
-echo "  12. Click 'Save changes'"
+echo "  7. Click 'Edit' on the newly created user"
+echo "  8. Scroll down to 'Password' section"
+echo "  9. Enter password: ${GITLAB_OXIDIZED_PASSWORD}"
+echo "  10. Confirm password: ${GITLAB_OXIDIZED_PASSWORD}"
+echo "  11. Click 'Save changes'"
 echo ""
 read -p "Press ENTER when the user is created and password is set..."
 echo ""
@@ -206,29 +198,36 @@ read -p "Press ENTER when the deploy key is added..."
 echo ""
 
 # ============================================================================
-# STEP 4: Setup SSH Known Hosts
+# STEP 4: Setup SSH Known Hosts in Container
 # ============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Configuring SSH Connection..."
+echo "Configuring SSH Connection in Container..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 docker exec oxidized bash -c "
 mkdir -p /opt/oxidized/.ssh
 chmod 700 /opt/oxidized/.ssh
 
+# Add GitLab to known_hosts
 ssh-keyscan -p 22 -H gitlab-ce > /opt/oxidized/.ssh/known_hosts 2>/dev/null
 
 if [ -s /opt/oxidized/.ssh/known_hosts ]; then
     echo '✅ SSH known_hosts configured'
+else
+    echo '❌ Failed to get GitLab host key'
 fi
 "
 
+echo "✅ SSH configuration complete"
+
 # ============================================================================
-# STEP 5: Initialize Git Remote
+# STEP 5: Initialize Git Repository and Remote
 # ============================================================================
 echo ""
-echo "Configuring Git repository..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Configuring Git Repository..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Check if repo already exists
 REPO_EXISTS=$(docker exec oxidized bash -c "[ -d '/opt/oxidized/devices.git' ] && echo 'yes' || echo 'no'")
@@ -244,9 +243,9 @@ if [ "$REPO_EXISTS" = "no" ]; then
     echo 'This repository contains automated backups of network device configurations.' >> README.md
     echo '' >> README.md
     echo '## Automated by Oxidized' >> README.md
-    echo '- Backup interval: Every 10 minutes' >> README.md
-    echo '- Commits show only actual configuration changes' >> README.md
-    echo '- Each commit message includes device name and timestamp' >> README.md
+    echo '- Backup interval: Every 5 minutes' >> README.md
+    echo '- Push method: SSH with Deploy Key' >> README.md
+    echo '- Each commit shows actual configuration changes' >> README.md
     git add README.md
     git config user.name '${OXIDIZED_GIT_USER}'
     git config user.email '${OXIDIZED_GIT_EMAIL}'
@@ -257,7 +256,9 @@ else
     echo "✅ Git repository already exists"
 fi
 
-# Configure remote
+# Configure remote with SSH
+echo ""
+echo "Setting up SSH remote..."
 docker exec oxidized bash -c "
 cd /opt/oxidized/devices.git
 git config user.name '${OXIDIZED_GIT_USER}'
@@ -266,19 +267,18 @@ git remote remove origin 2>/dev/null || true
 git remote add origin 'git@gitlab-ce:${GITLAB_PROJECT_PATH}.git'
 "
 
-echo "✅ Git remote configured"
+echo "✅ Git remote configured (SSH)"
 
 # ============================================================================
 # STEP 6: Test SSH Connection and Initial Push
 # ============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Testing SSH Connection and Initial Push"
+echo "Testing SSH Connection"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# First, test SSH connection
-echo "Step 6.1: Testing SSH connection to GitLab..."
+echo "Testing SSH connection to GitLab..."
 SSH_TEST=$(docker exec oxidized bash -c "
 ssh -p 22 -i /etc/oxidized/keys/gitlab \
     -o UserKnownHostsFile=/opt/oxidized/.ssh/known_hosts \
@@ -294,47 +294,29 @@ if echo "$SSH_TEST" | grep -qE "(Welcome to GitLab|successfully authenticated)";
     echo ""
     echo "✅ SSH connection successful!"
     echo ""
-elif echo "$SSH_TEST" | grep -q "Permission denied"; then
+else
     echo ""
-    echo "❌ SSH connection failed: Permission denied"
+    echo "❌ SSH connection failed"
     echo ""
-    echo "Please check:"
+    echo "Please verify:"
     echo "  • Deploy key was added in GitLab"
     echo "  • 'Grant write permissions' was checked"
     echo "  • The correct public key was used"
     echo ""
-    echo "Public key location:"
-    echo "  In container: /etc/oxidized/keys/gitlab.pub"
-    echo "  On host: ${INSTALL_DIR}/oxidized/keys/gitlab.pub"
-    echo ""
-    echo "Public key content:"
+    echo "Public key:"
     echo "${PUBLIC_KEY}"
     echo ""
-    read -p "Fix the issue in GitLab and press ENTER to retry..."
-    
-    # Retry SSH test
-    SSH_TEST=$(docker exec oxidized bash -c "
-    ssh -p 22 -i /etc/oxidized/keys/gitlab \
-        -o UserKnownHostsFile=/opt/oxidized/.ssh/known_hosts \
-        -o StrictHostKeyChecking=yes \
-        -o BatchMode=yes \
-        -o ConnectTimeout=10 \
-        -T git@gitlab-ce 2>&1
-    " || true)
-    
-    if ! echo "$SSH_TEST" | grep -qE "(Welcome to GitLab|successfully authenticated)"; then
-        echo "❌ SSH still not working. Please check the configuration manually."
-        SETUP_SUCCESS=false
-    fi
-else
-    echo ""
-    echo "⚠️  SSH connection test inconclusive (this can be normal)"
-    echo "    Proceeding with push test..."
-    echo ""
+    read -p "Fix the issue and press ENTER to retry..."
+    exit 1
 fi
 
-# Now attempt the initial push
-echo "Step 6.2: Performing initial push to GitLab..."
+# ============================================================================
+# STEP 7: Initial Push
+# ============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Performing Initial Push to GitLab"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
 PUSH_OUTPUT=$(docker exec oxidized bash -c "
@@ -343,18 +325,18 @@ cd /opt/oxidized/devices.git
 # Set SSH command
 export GIT_SSH_COMMAND='ssh -p 22 -i /etc/oxidized/keys/gitlab -o UserKnownHostsFile=/opt/oxidized/.ssh/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=30'
 
-# Check if we have commits to push
+# Verify we have commits
 if [ -z \"\$(git log 2>/dev/null)\" ]; then
     echo 'ERROR: No commits in local repository'
     exit 1
 fi
 
-# Check current remote
+# Show remote
 echo 'Current remote:'
 git remote -v
+echo ''
 
 # Try to push
-echo ''
 echo 'Attempting push...'
 git push -u origin main 2>&1
 " || true)
@@ -369,96 +351,21 @@ echo ""
 if echo "$PUSH_OUTPUT" | grep -qE "(main -> main|branch 'main' set up|new branch)"; then
     echo "✅ SUCCESS! Initial push completed successfully!"
     echo ""
-    echo "🎉 GitLab integration is fully working!"
-    echo ""
-    echo "Verification:"
-    echo "  • Local commits were pushed to GitLab"
-    echo "  • Branch 'main' is tracking 'origin/main'"
-    echo "  • SSH authentication working"
-    echo ""
-    echo "Check in GitLab: https://${GITLAB_DOMAIN}/${GITLAB_PROJECT_PATH}"
+    echo "🎉 GitLab SSH integration is fully working!"
     echo ""
     SETUP_SUCCESS=true
     
 elif echo "$PUSH_OUTPUT" | grep -q "Everything up-to-date"; then
     echo "✅ Push successful (repository was already up-to-date)"
     echo ""
-    echo "🎉 GitLab integration is working!"
-    echo ""
     SETUP_SUCCESS=true
     
-elif echo "$PUSH_OUTPUT" | grep -q "Permission denied"; then
-    echo "❌ FAILED: Permission Denied"
-    echo ""
-    echo "The SSH key is not authorized or doesn't have write permissions."
-    echo ""
-    echo "Please verify in GitLab:"
-    echo "  1. Go to: https://${GITLAB_DOMAIN}/${GITLAB_PROJECT_PATH}/-/settings/repository"
-    echo "  2. Expand 'Deploy Keys'"
-    echo "  3. Check that 'Oxidized Backup Key' is listed"
-    echo "  4. Verify that 'Write access allowed' is checked"
-    echo ""
-    echo "Public key (should match):"
-    echo "${PUBLIC_KEY}"
-    echo ""
-    echo "Debugging:"
-    echo "  • Check key in container: docker exec oxidized cat /etc/oxidized/keys/gitlab.pub"
-    echo "  • Check permissions: docker exec oxidized ls -la /etc/oxidized/keys/"
-    echo ""
-    SETUP_SUCCESS=false
-    
-elif echo "$PUSH_OUTPUT" | grep -qE "(repository not found|does not appear to be a git repository|Could not read from remote)"; then
-    echo "❌ FAILED: Repository Not Found or Not Accessible"
-    echo ""
-    echo "The GitLab project might not exist or isn't configured correctly."
-    echo ""
-    echo "Please verify:"
-    echo "  1. Project exists: https://${GITLAB_DOMAIN}/${GITLAB_PROJECT_PATH}"
-    echo "  2. You're logged in as: ${GITLAB_OXIDIZED_USER}"
-    echo "  3. Project was initialized with README"
-    echo "  4. Project visibility is set (Private recommended)"
-    echo ""
-    SETUP_SUCCESS=false
-    
-elif echo "$PUSH_OUTPUT" | grep -q "Connection refused\|timed out\|Could not resolve hostname"; then
-    echo "❌ FAILED: Network/Connection Error"
-    echo ""
-    echo "Cannot reach GitLab container."
-    echo ""
-    echo "Please check:"
-    echo "  • GitLab container is running: docker ps | grep gitlab"
-    echo "  • Docker network is working: docker network ls | grep gitlabnet"
-    echo "  • Containers can communicate:"
-    echo "    docker exec oxidized ping -c 3 gitlab-ce"
-    echo ""
-    SETUP_SUCCESS=false
-    
-elif echo "$PUSH_OUTPUT" | grep -q "rejected\|failed to push"; then
-    echo "❌ FAILED: Push Rejected"
-    echo ""
-    echo "The push was rejected by GitLab."
-    echo ""
-    echo "Common causes:"
-    echo "  • Remote has commits that aren't in local repo"
-    echo "  • Branch protection rules enabled"
-    echo ""
-    echo "Try manually:"
-    echo "  docker exec oxidized bash"
-    echo "  cd /opt/oxidized/devices.git"
-    echo "  git pull origin main"
-    echo "  git push origin main"
-    echo ""
-    SETUP_SUCCESS=false
-    
 else
-    echo "⚠️  Push completed with unexpected output"
+    echo "❌ Push failed or had unexpected output"
     echo ""
-    echo "Please verify manually:"
+    echo "Please check manually:"
     echo "  1. Go to: https://${GITLAB_DOMAIN}/${GITLAB_PROJECT_PATH}"
-    echo "  2. Check if you can see commits"
-    echo "  3. Look for 'Initial repository setup by Oxidized' commit"
-    echo ""
-    echo "If you see the commit, everything is working!"
+    echo "  2. Look for commits"
     echo ""
     SETUP_SUCCESS=false
 fi
@@ -468,7 +375,7 @@ fi
 # ============================================================================
 echo ""
 echo "╔══════════════════════════════════════════════════════════════════╗"
-echo "║                  GitLab Integration Summary                      ║"
+echo "║              GitLab SSH Integration Summary                      ║"
 echo "╚══════════════════════════════════════════════════════════════════╝"
 echo ""
 echo "📋 Configuration Details:"
@@ -479,8 +386,9 @@ echo "  Password:         ${GITLAB_OXIDIZED_PASSWORD}"
 echo "  Project:          ${GITLAB_PROJECT_PATH}"
 echo "  Project URL:      https://${GITLAB_DOMAIN}/${GITLAB_PROJECT_PATH}"
 echo ""
-echo "🔐 SSH Key:"
+echo "🔐 SSH Authentication:"
 echo "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  Method:  Deploy Key (SSH)"
 echo "  Public:  ${INSTALL_DIR}/oxidized/keys/gitlab.pub"
 echo "  Private: ${INSTALL_DIR}/oxidized/keys/gitlab"
 echo ""
@@ -493,18 +401,25 @@ echo ""
 if [ "$SETUP_SUCCESS" = true ]; then
     echo "✅ Status: WORKING"
     echo ""
+    echo "🎯 How it works:"
+    echo "  • Device backup triggers Oxidized"
+    echo "  • Oxidized commits changes to local git"
+    echo "  • Hook executes: git push via SSH"
+    echo "  • SSH uses Deploy Key for authentication"
+    echo "  • Changes appear in GitLab"
+    echo ""
     echo "🎯 Next Steps:"
     echo "  • Device backups will automatically push to GitLab"
     echo "  • View backups at: https://${GITLAB_DOMAIN}/${GITLAB_PROJECT_PATH}"
-    echo "  • Check Oxidized logs: docker logs oxidized"
+    echo "  • Check logs: docker logs oxidized"
+    echo "  • Trigger manual backup: docker exec oxidized curl -X GET http://localhost:8888/reload"
 else
     echo "⚠️  Status: NEEDS ATTENTION"
     echo ""
     echo "🔧 Troubleshooting:"
-    echo "  1. Verify all steps were completed correctly"
-    echo "  2. Check GitLab project: https://${GITLAB_DOMAIN}/${GITLAB_PROJECT_PATH}"
-    echo "  3. Test SSH manually:"
-    echo "     docker exec oxidized ssh -p 22 -i /etc/oxidized/keys/gitlab -T git@gitlab-ce"
+    echo "  1. Verify Deploy Key has write permissions"
+    echo "  2. Test SSH: docker exec oxidized ssh -p 22 -i /etc/oxidized/keys/gitlab -T git@gitlab-ce"
+    echo "  3. Check logs: docker logs oxidized"
     echo "  4. Re-run this script if needed"
 fi
 

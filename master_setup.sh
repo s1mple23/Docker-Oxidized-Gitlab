@@ -1,6 +1,6 @@
 #!/bin/bash
-# master_setup.sh - FULLY AUTOMATED Infrastructure Setup
-# Version: 10.3 - Optimiert für Oxidized (keine Doppel-Commits)
+# master_setup.sh - Complete SSH-Only Infrastructure Setup
+# Version: 11.0 - Pure SSH with Deploy Key (NO TOKEN)
 set -e
 
 RED='\033[0;31m'
@@ -28,8 +28,7 @@ escape_for_sed() {
 clear
 echo "╔══════════════════════════════════════════════╗"
 echo "║  Docker Infrastructure Master Setup          ║"
-echo "║  Version 10.3 - FULLY AUTOMATED              ║"
-echo "║  + Oxidized Optimizations                    ║"
+echo "║  Version 11.0 - SSH ONLY (No Token)          ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 echo "Started: $(date)"
@@ -286,9 +285,7 @@ cat > "$CONFIG_SUMMARY" << EOF
 # ============================================================================
 # Generated: $(date)
 # Installation Directory: $INSTALL_DIR
-#
-# This file contains all configuration settings used during installation.
-# Keep this file for reference and documentation purposes.
+# Authentication Method: SSH with Deploy Key (NO TOKEN)
 # ============================================================================
 
 [ORGANIZATION]
@@ -325,8 +322,8 @@ if [ "${INSTALL_OXIDIZED}" = "true" ]; then
 [OXIDIZED]
 Device Username: $DEVICE_DEFAULT_USERNAME
 Devices Configured: $DEVICE_COUNT
-Interval: 600 seconds (10 minutes)
-Features: Single repo mode, fast triggers, optimized diffs
+Interval: 300 seconds (5 minutes)
+Push Method: SSH with Deploy Key
 EOF
 fi
 
@@ -337,6 +334,7 @@ if [ "${INSTALL_GITLAB}" = "true" ]; then
 SSH Port: $GITLAB_SSH_PORT
 Oxidized User: $GITLAB_OXIDIZED_USER
 Project: $GITLAB_PROJECT_PATH
+Authentication: SSH Deploy Key (Write permissions)
 EOF
 fi
 
@@ -379,36 +377,32 @@ SCRIPT_COUNT=$(ls -1 "$INSTALL_DIR/scripts"/*.sh 2>/dev/null | wc -l)
 echo -e "${GREEN}✅ Copied $SCRIPT_COUNT scripts${NC}"
 
 # ============================================================================
-# GENERATE CONFIGURATIONS
+# GENERATE CONFIGURATIONS - SSH ONLY
 # ============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Generating Configurations (Optimized)"
+echo "Generating Configurations (SSH Only - No Token)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# OXIDIZED - OPTIMIZED VERSION
+# OXIDIZED - SSH ONLY
 if [ "${INSTALL_OXIDIZED}" = "true" ]; then
     echo ""
-    echo "Creating Oxidized configuration (optimized for no duplicate commits)..."
+    echo "Creating Oxidized configuration (SSH-based push)..."
     
     cat > oxidized/config/config << EOF
 ---
-# Optimized Oxidized Configuration - HTTPS githubrepo method
-# - No duplicate commits (single_repo: true)
-# - Fast backups (interval: 600, next_adds_job: true)
-# - Immediate commits (githubrepo hook)
 username: ${DEVICE_DEFAULT_USERNAME}
 password: ${DEVICE_DEFAULT_PASSWORD}
 model: ${DEVICE_DEFAULT_MODEL}
 resolve_dns: true
-interval: 600
+interval: 300
 use_syslog: false
 debug: false
 threads: ${OXIDIZED_THREADS}
 timeout: ${OXIDIZED_TIMEOUT}
 retries: ${OXIDIZED_RETRIES}
 prompt: !ruby/regexp /^[\w.@-]+[#>]\s?$/
-next_adds_job: true
+next_adds_job: false
 vars:
   remove_secret: true
 groups: {}
@@ -430,7 +424,6 @@ output:
     user: ${OXIDIZED_GIT_USER}
     email: ${OXIDIZED_GIT_EMAIL}
     repo: "${OXIDIZED_GIT_REPO}"
-    single_repo: true
 
 source:
   default: csv
@@ -453,17 +446,16 @@ model_map:
   arista: eos
 EOF
 
-    # Add GitLab hook if GitLab is installed
+    # Add SSH hook if GitLab is installed
     if [ "${INSTALL_GITLAB}" = "true" ]; then
-        cat >> oxidized/config/config << EOF
+        cat >> oxidized/config/config << 'EOF'
 
+# SSH-based push hook - NO TOKEN!
 hooks:
   push_to_remote:
-    type: githubrepo
+    type: exec
     events: [post_store]
-    remote_repo: https://oauth2:GITLAB_TOKEN_PLACEHOLDER@gitlab-ce/${GITLAB_PROJECT_PATH}.git
-    publickey: /dev/null
-    privatekey: /dev/null
+    cmd: sh -c 'cd /opt/oxidized/devices.git && GIT_SSH_COMMAND="ssh -i /etc/oxidized/keys/gitlab -o UserKnownHostsFile=/opt/oxidized/.ssh/known_hosts -o StrictHostKeyChecking=yes" git push origin main'
 EOF
     fi
 
@@ -485,7 +477,7 @@ ROUTERDB_HEADER
         fi
     done
 
-    # OPTIMIZED Wrapper script
+    # SIMPLIFIED Wrapper script - SSH only
     if [ "${INSTALL_GITLAB}" = "true" ]; then
         cat > oxidized/config/oxidized_wrapper.sh << 'EOF'
 #!/bin/bash
@@ -494,23 +486,19 @@ LOG="/var/log/oxidized/wrapper_$(date +%Y%m%d).log"
 mkdir -p /var/log/oxidized
 exec > >(tee -a "$LOG") 2>&1
 
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Oxidized Wrapper - Optimized v10.3"
+echo "=========================================="
+echo "Oxidized Wrapper - SSH Only"
 echo "Started: $(date)"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "=========================================="
 
 sleep 10
 
-# Git Config - OPTIMIZED for better diffs
+# Git Config
 git config --global user.name "Oxidized"
 git config --global user.email "oxidized@localhost"
 git config --global init.defaultBranch main
-git config --global diff.algorithm histogram
-git config --global core.whitespace trailing-space,space-before-tab
-git config --global diff.renames true
-git config --global diff.renameLimit 999999
-git config --global http.sslVerify false
 
+# Init repo if needed
 if [ ! -d "/opt/oxidized/devices.git" ]; then
     cd /opt/oxidized
     git init devices.git
@@ -518,31 +506,23 @@ if [ ! -d "/opt/oxidized/devices.git" ]; then
     echo "# Network Devices" > README.md
     git add README.md
     git commit -m "Initial commit"
+    echo "✅ Git repository initialized"
 fi
 
 cd /opt/oxidized/devices.git
 
-# Setup GitLab remote if token is available (non-blocking)
-if [ -f /run/secrets/gitlab_token ]; then
-    TOKEN=$(cat /run/secrets/gitlab_token)
-    git remote remove origin 2>/dev/null || true
-    git remote add origin "https://oauth2:${TOKEN}@gitlab-ce/oxidized/network.git"
-    echo "✅ GitLab remote configured with token"
-    
-    # Try initial push (non-blocking)
-    if timeout 30 git push -u origin main 2>/dev/null; then
-        echo "✅ Initial push successful"
-    else
-        echo "ℹ️  Initial push skipped (will happen automatically on first backup)"
-    fi
-else
-    echo "ℹ️  GitLab token not yet configured - will use local git only"
-    echo "   Run setup script to configure GitLab integration later"
-fi
+# Setup SSH known_hosts
+mkdir -p /opt/oxidized/.ssh
+chmod 700 /opt/oxidized/.ssh
+ssh-keyscan -p 22 -H gitlab-ce > /opt/oxidized/.ssh/known_hosts 2>/dev/null
 
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+# Setup git remote with SSH
+git remote remove origin 2>/dev/null || true
+git remote add origin 'git@gitlab-ce:oxidized/network.git'
+
+echo "✅ Git remote configured (SSH)"
+echo ""
 echo "Starting Oxidized..."
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 cd /opt/oxidized
 exec oxidized
 EOF
@@ -553,82 +533,10 @@ set -e
 git config --global user.name "Oxidized"
 git config --global user.email "oxidized@localhost"
 git config --global init.defaultBranch main
-git config --global diff.algorithm histogram
-git config --global diff.renames true
 [ ! -d "/opt/oxidized/devices.git" ] && git init /opt/oxidized/devices.git
 cd /opt/oxidized
 exec oxidized
 EOF
-    fi
-
-    # OPTIMIZED Git push hook
-    if [ "${INSTALL_GITLAB}" = "true" ]; then
-        cat > oxidized/config/git_push_hook.sh << 'HOOK'
-#!/bin/bash
-# Optimized Git Push Hook - No duplicate commits
-LOG="/var/log/oxidized/git_push_hook.log"
-LOCK_FILE="/tmp/oxidized_push.lock"
-mkdir -p /var/log/oxidized
-
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG"; }
-
-# Prevent concurrent pushes
-if [ -f "$LOCK_FILE" ]; then
-    log "⏸️  Push already in progress, skipping"
-    exit 0
-fi
-
-touch "$LOCK_FILE"
-trap "rm -f $LOCK_FILE" EXIT
-
-cd /opt/oxidized/devices.git || exit 1
-
-# Check if there are actually changes
-if [ -z "$(git status --porcelain)" ]; then
-    log "ℹ️  No changes detected, skipping"
-    exit 0
-fi
-
-# Skip if only whitespace changes
-git diff --cached --quiet --ignore-all-space --ignore-blank-lines
-if [ $? -eq 0 ]; then
-    log "ℹ️  Only whitespace changes, skipping"
-    git reset --hard HEAD
-    exit 0
-fi
-
-# Get changed devices
-CHANGED_FILES=$(git status --porcelain | awk '{print $2}')
-DEVICE_NAMES=$(echo "$CHANGED_FILES" | sed 's/\..*$//' | sort -u | tr '\n' ', ' | sed 's/,$//')
-
-log "📝 Committing changes for devices: $DEVICE_NAMES"
-
-git add -A
-git commit -m "Config update: $DEVICE_NAMES @ $(date '+%Y-%m-%d %H:%M:%S')" 2>&1 | tee -a "$LOG"
-
-if [ $? -ne 0 ]; then
-    log "❌ Commit failed"
-    exit 1
-fi
-
-log "🚀 Pushing to GitLab..."
-export GIT_SSH_COMMAND="ssh -p 22 -i /etc/oxidized/keys/gitlab -o UserKnownHostsFile=/opt/oxidized/.ssh/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=10"
-
-if timeout 30 git push origin main 2>&1 | tee -a "$LOG"; then
-    log "✅ Push successful for: $DEVICE_NAMES"
-else
-    EXIT_CODE=$?
-    if [ $EXIT_CODE -eq 124 ]; then
-        log "⏱️  Push timeout"
-    else
-        log "❌ Push failed (exit code: $EXIT_CODE)"
-    fi
-    exit $EXIT_CODE
-fi
-HOOK
-    else
-        echo '#!/bin/bash' > oxidized/config/git_push_hook.sh
-        echo 'echo "[$(date)] Local backup" >> /var/log/oxidized/git_push_hook.log' >> oxidized/config/git_push_hook.sh
     fi
 
     chmod +x oxidized/config/*.sh
@@ -639,16 +547,14 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     ruby ruby-dev libsqlite3-dev libssl-dev libssh2-1-dev libicu-dev \
-    pkg-config cmake make gcc g++ git openssh-client ca-certificates curl sudo \
+    pkg-config cmake make gcc g++ git openssh-client ca-certificates curl \
     && apt-get clean
 RUN gem install --no-document oxidized oxidized-script oxidized-web
 RUN groupadd -g 1000 oxidized && useradd -u 1000 -g 1000 -m oxidized && \
-    echo "oxidized ALL=(ALL) NOPASSWD: /usr/sbin/update-ca-certificates" >> /etc/sudoers && \
     mkdir -p /opt/oxidized /etc/oxidized /etc/oxidized/keys /var/log/oxidized && \
     chown -R oxidized:oxidized /opt/oxidized /etc/oxidized /var/log/oxidized
 COPY --chown=oxidized:oxidized config/config /etc/oxidized/config
 COPY --chown=oxidized:oxidized config/router.db /opt/oxidized/router.db
-COPY --chown=oxidized:oxidized config/git_push_hook.sh /opt/oxidized/git_push_hook.sh
 COPY --chown=oxidized:oxidized config/oxidized_wrapper.sh /opt/oxidized/oxidized_wrapper.sh
 RUN chmod +x /opt/oxidized/*.sh
 VOLUME ["/opt/oxidized", "/var/log/oxidized", "/etc/oxidized/keys"]
@@ -659,10 +565,10 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=90s CMD curl -f http://l
 CMD ["/opt/oxidized/oxidized_wrapper.sh"]
 DOCKERFILE
 
-    echo -e "${GREEN}✅ Oxidized configured ($DEVICE_COUNT devices) - OPTIMIZED${NC}"
+    echo -e "${GREEN}✅ Oxidized configured ($DEVICE_COUNT devices) - SSH ONLY${NC}"
 fi
 
-# GITLAB (unchanged)
+# GITLAB
 if [ "${INSTALL_GITLAB}" = "true" ]; then
     echo ""
     echo "Creating GitLab configuration..."
@@ -680,7 +586,7 @@ EOF
     echo -e "${GREEN}✅ GitLab configured${NC}"
 fi
 
-# NGINX (unchanged)
+# NGINX
 echo ""
 echo "Creating Nginx configuration..."
 
@@ -756,7 +662,7 @@ fi
 
 echo -e "${GREEN}✅ Nginx configured${NC}"
 
-# DOCKER COMPOSE (unchanged)
+# DOCKER COMPOSE
 echo ""
 echo "Creating Docker Compose file..."
 
@@ -1043,7 +949,7 @@ if [ -f "$INSTALL_DIR/.reboot_required" ]; then
     if [ "${INSTALL_GITLAB}" = "true" ] && [ "${INSTALL_OXIDIZED}" = "true" ]; then
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "Step 8: GitLab Integration"
+        echo "Step 8: GitLab SSH Integration"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         ./scripts/06_setup_ssh_and_gitlab.sh
     fi
@@ -1089,10 +995,9 @@ if [ -f "$INSTALL_DIR/.reboot_required" ]; then
     echo ""
     if [ "${INSTALL_OXIDIZED}" = "true" ]; then
         echo "⚡ Oxidized Features:"
-        echo "  • Fast backups every 10 minutes"
+        echo "  • Fast backups every 5 minutes"
+        echo "  • SSH-based push to GitLab"
         echo "  • Immediate trigger: ./scripts/trigger_backup.sh all"
-        echo "  • No duplicate commits (optimized)"
-        echo "  • Better diff display in GitLab"
         echo ""
     fi
     echo "✅ Setup completed: $(date)"
@@ -1262,23 +1167,26 @@ echo ""
 echo "Starting all remaining services..."
 docker compose up -d
 
+echo ""
+echo "Waiting for services to stabilize (30 seconds)..."
+sleep 30
+
 if [ "${INSTALL_GITLAB}" = "true" ] && [ "${INSTALL_OXIDIZED}" = "true" ]; then
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Step 8: GitLab Integration Setup"
+    echo "Step 8: GitLab SSH Integration Setup"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
     echo ""
-    echo "Now configuring GitLab integration..."
-    echo "This will create the Oxidized user, project, and token."
+    echo "Now configuring GitLab SSH integration..."
+    echo "This requires manual configuration in GitLab web interface."
     echo ""
     
-    # Run the GitLab setup script
-    ./scripts/06_setup_gitlab_token.sh
+    # Run the GitLab SSH setup script
+    ./scripts/06_setup_ssh_and_gitlab.sh
     
-    # After token setup, Oxidized will be started automatically
     echo ""
-    echo "✅ GitLab integration configured!"
+    echo "✅ GitLab SSH integration configured!"
 fi
 
 echo ""
@@ -1334,10 +1242,9 @@ echo "🌐 Services:"
 [ "${INSTALL_GITLAB}" = "true" ] && echo "  • GitLab: https://${GITLAB_DOMAIN}"
 echo ""
 if [ "${INSTALL_OXIDIZED}" = "true" ]; then
-    echo "⚡ Oxidized Features (OPTIMIZED):"
-    echo "  • Fast backups every 10 minutes"
-    echo "  • No duplicate commits"
-    echo "  • Better diff display in GitLab"
+    echo "⚡ Oxidized Features (SSH-based):"
+    echo "  • Fast backups every 5 minutes"
+    echo "  • SSH Deploy Key authentication"
     echo "  • Immediate trigger: ./scripts/trigger_backup.sh all"
     echo ""
 fi
