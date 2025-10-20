@@ -18,7 +18,7 @@ trap 'echo -e "${RED}Error on line $LINENO${NC}"; exit 1' ERR
 # ============================================================================
 generate_password() {
     local length=${1:-16}
-    tr -dc 'A-Za-z0-9!@#$%^&*()_+=' < /dev/urandom | head -c "$length"
+    tr -dc 'A-Za-z0-9!%&()_+=' < /dev/urandom | head -c "$length"
 }
 
 escape_for_sed() {
