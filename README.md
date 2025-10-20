@@ -312,11 +312,9 @@ This section provides a complete walkthrough with placeholders for screenshots.
 
 ---
 
-#### 10. First Device Backup
+#### 10. Device Change and Backup
 <img width="1018" height="260" alt="image" src="https://github.com/user-attachments/assets/4ac59978-5de2-43bd-8ffd-652f8ec026c7" />
 
-
-**Screenshot 19: Oxidized and GitLab Check new Backup**
 Oxidized:
 <img width="1037" height="278" alt="image" src="https://github.com/user-attachments/assets/81ead1b6-eb5e-4010-9594-d27d603d3246" />
 <img width="1883" height="985" alt="image" src="https://github.com/user-attachments/assets/9db11530-9031-4882-90a8-23f98641eaf9" />
