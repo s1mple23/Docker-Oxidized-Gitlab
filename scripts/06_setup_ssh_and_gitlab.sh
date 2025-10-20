@@ -159,12 +159,14 @@ echo ""
 echo "     Project name: Network"
 echo "     Project slug: network"
 echo "     Visibility Level: Private"
-echo "     ✅ Initialize repository with a README (MUST be checked!)"
+echo "     ⚠️  Initialize repository with a README: LEAVE UNCHECKED!"
 echo ""
 echo "  4. Click 'Create project'"
-echo "  5. You should see the project page with a README.md file"
+echo "  5. You should see an empty project (no files yet)"
 echo ""
-read -p "Press ENTER when the project is created..."
+echo "  ℹ️  The project will be populated automatically by Oxidized's first backup"
+echo ""
+read -p "Press ENTER when the empty project is created..."
 echo ""
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -238,6 +240,10 @@ if [ "$REPO_EXISTS" = "no" ]; then
     cd /opt/oxidized
     git init devices.git
     cd devices.git
+    git config user.name '${OXIDIZED_GIT_USER}'
+    git config user.email '${OXIDIZED_GIT_EMAIL}'
+    
+    # Create initial README to establish main branch
     echo '# Network Device Configurations - ${ORG_NAME}' > README.md
     echo '' >> README.md
     echo 'This repository contains automated backups of network device configurations.' >> README.md
@@ -246,12 +252,11 @@ if [ "$REPO_EXISTS" = "no" ]; then
     echo '- Backup interval: Every 5 minutes' >> README.md
     echo '- Push method: SSH with Deploy Key' >> README.md
     echo '- Each commit shows actual configuration changes' >> README.md
+    
     git add README.md
-    git config user.name '${OXIDIZED_GIT_USER}'
-    git config user.email '${OXIDIZED_GIT_EMAIL}'
-    git commit -m 'Initial repository setup by Oxidized'
+    git commit -m 'Initial commit by Oxidized'
     "
-    echo "✅ Git repository initialized"
+    echo "✅ Git repository initialized with initial commit"
 else
     echo "✅ Git repository already exists"
 fi
@@ -325,19 +330,13 @@ cd /opt/oxidized/devices.git
 # Set SSH command
 export GIT_SSH_COMMAND='ssh -p 22 -i /etc/oxidized/keys/gitlab -o UserKnownHostsFile=/opt/oxidized/.ssh/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=30'
 
-# Verify we have commits
-if [ -z \"\$(git log 2>/dev/null)\" ]; then
-    echo 'ERROR: No commits in local repository'
-    exit 1
-fi
-
 # Show remote
 echo 'Current remote:'
 git remote -v
 echo ''
 
 # Try to push
-echo 'Attempting push...'
+echo 'Attempting initial push to empty GitLab project...'
 git push -u origin main 2>&1
 " || true)
 
@@ -365,7 +364,8 @@ else
     echo ""
     echo "Please check manually:"
     echo "  1. Go to: https://${GITLAB_DOMAIN}/${GITLAB_PROJECT_PATH}"
-    echo "  2. Look for commits"
+    echo "  2. Verify the project is completely empty (no README)"
+    echo "  3. Check Deploy Key has write permissions"
     echo ""
     SETUP_SUCCESS=false
 fi
