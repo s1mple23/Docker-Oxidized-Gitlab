@@ -46,50 +46,34 @@ else
 fi
 
 # ============================================================================
-# STEP 2: Generate SSH Keys - FIXED VERSION
+# STEP 2: Generate SSH Keys - WORKING VERSION
 # ============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 2: Generating SSH Keys (Fixed)"
+echo "Step 2: Generating SSH Keys"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Create keys directory on host FIRST
+# Create keys directory on host
 mkdir -p "${INSTALL_DIR}/oxidized/keys"
-chmod 755 "${INSTALL_DIR}/oxidized/keys"
 
-# Generate keys on HOST, not in container
+# Generate keys directly on host (they will be mounted into container)
 if [ ! -f "${INSTALL_DIR}/oxidized/keys/gitlab" ]; then
-    echo "Generating SSH key pair on host..."
+    echo "Generating SSH key pair..."
     
-    # Generate on host
     ssh-keygen -t ${SSH_KEY_TYPE} \
         -f "${INSTALL_DIR}/oxidized/keys/gitlab" \
         -N '' \
         -C "${OXIDIZED_GIT_EMAIL}"
     
-    # Set correct permissions
-    chmod 600 "${INSTALL_DIR}/oxidized/keys/gitlab"
-    chmod 644 "${INSTALL_DIR}/oxidized/keys/gitlab.pub"
-    
-    echo "✅ SSH key pair generated on host"
+    echo "✅ SSH key pair generated"
 else
     echo "✅ SSH key pair already exists"
 fi
 
-# Now copy to container volume
-echo "Copying keys to container..."
-docker cp "${INSTALL_DIR}/oxidized/keys/gitlab" oxidized:/etc/oxidized/keys/gitlab
-docker cp "${INSTALL_DIR}/oxidized/keys/gitlab.pub" oxidized:/etc/oxidized/keys/gitlab.pub
-
-# Set permissions in container
-docker exec oxidized bash -c "
-chmod 700 /etc/oxidized/keys
-chmod 600 /etc/oxidized/keys/gitlab
-chmod 644 /etc/oxidized/keys/gitlab.pub
-chown -R oxidized:oxidized /etc/oxidized/keys
-"
-
-echo "✅ Keys copied to container"
+# Set permissions on host (the directory is mounted as volume)
+chmod 700 "${INSTALL_DIR}/oxidized/keys" 2>/dev/null || true
+chmod 600 "${INSTALL_DIR}/oxidized/keys/gitlab" 2>/dev/null || true
+chmod 644 "${INSTALL_DIR}/oxidized/keys/gitlab.pub" 2>/dev/null || true
 
 PUBLIC_KEY=$(cat "${INSTALL_DIR}/oxidized/keys/gitlab.pub")
 
