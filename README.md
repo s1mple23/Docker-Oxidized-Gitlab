@@ -603,12 +603,11 @@ nano oxidized/config/router.db
 # Add line:
 # 192.168.1.5:ios:admin:password:
 
-# Rebuild container to pick up changes
-docker compose down oxidized
-docker compose up -d oxidized
+# Copy changes and reload router.db
+docker cp oxidized/config/router.db oxidized:/opt/oxidized/router.db
 
-# Wait for Oxidized to start (about 30 seconds)
-sleep 30
+# Reload Oxidized (triggers re-read of router.db)
+docker exec oxidized curl -X GET http://localhost:8888/reload
 
 # Trigger backup immediately
 ./scripts/trigger_backup.sh all
