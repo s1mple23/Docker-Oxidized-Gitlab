@@ -29,20 +29,30 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "Step 1: Verifying Containers"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-if ! docker ps | grep -q "oxidized"; then
-    echo "Starting Oxidized..."
-    docker compose up -d oxidized
-    sleep 20
-else
-    echo "✅ Oxidized is running"
-fi
-
+# Check if GitLab is running
 if ! docker ps | grep -q "gitlab-ce"; then
     echo "❌ GitLab container is not running!"
-    echo "Run: docker compose up -d gitlab-ce"
+    echo "Please start GitLab first: docker compose up -d gitlab-ce"
     exit 1
 else
     echo "✅ GitLab is running"
+fi
+
+# Check if Oxidized is configured (doesn't need to be running yet)
+if [ ! -f "oxidized/config/config" ]; then
+    echo "❌ Oxidized config not found!"
+    echo "Please run master_setup.sh first"
+    exit 1
+else
+    echo "✅ Oxidized is configured"
+fi
+
+OXIDIZED_RUNNING=false
+if docker ps | grep -q "oxidized"; then
+    echo "✅ Oxidized is running"
+    OXIDIZED_RUNNING=true
+else
+    echo "ℹ️  Oxidized not yet started (will be started after token setup)"
 fi
 
 # ============================================================================

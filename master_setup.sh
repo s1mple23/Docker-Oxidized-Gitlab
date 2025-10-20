@@ -521,32 +521,28 @@ if [ ! -d "/opt/oxidized/devices.git" ]; then
 fi
 
 cd /opt/oxidized/devices.git
-git remote remove origin 2>/dev/null || true
 
-# Wait for GitLab token
-max_wait=300
-waited=0
-while [ ! -f /run/secrets/gitlab_token ] && [ $waited -lt $max_wait ]; do
-    sleep 5
-    waited=$((waited + 5))
-    if [ $((waited % 30)) -eq 0 ]; then
-        echo "Waiting for GitLab token... ($waited/$max_wait)"
-    fi
-done
-
+# Setup GitLab remote if token is available (non-blocking)
 if [ -f /run/secrets/gitlab_token ]; then
     TOKEN=$(cat /run/secrets/gitlab_token)
+    git remote remove origin 2>/dev/null || true
     git remote add origin "https://oauth2:${TOKEN}@gitlab-ce/oxidized/network.git"
-    echo "✅ GitLab remote configured"
+    echo "✅ GitLab remote configured with token"
     
-    # Try initial push
-    if timeout 30 git push -u origin main 2>/dev/null || true; then
+    # Try initial push (non-blocking)
+    if timeout 30 git push -u origin main 2>/dev/null; then
         echo "✅ Initial push successful"
+    else
+        echo "ℹ️  Initial push skipped (will happen automatically on first backup)"
     fi
 else
-    echo "⚠️  GitLab token not available, continuing without remote"
+    echo "ℹ️  GitLab token not yet configured - will use local git only"
+    echo "   Run setup script to configure GitLab integration later"
 fi
 
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Starting Oxidized..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 cd /opt/oxidized
 exec oxidized
 EOF
@@ -1233,18 +1229,56 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Step 7: Starting Services"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-docker compose up -d
 
+# Start GitLab first if both services are installed
+if [ "${INSTALL_GITLAB}" = "true" ]; then
+    echo "Starting GitLab (will take 3-5 minutes to initialize)..."
+    docker compose up -d gitlab-ce nginx
+    
+    echo ""
+    echo "Waiting for GitLab to be ready..."
+    MAX_WAIT=300
+    WAITED=0
+    while [ $WAITED -lt $MAX_WAIT ]; do
+        if docker inspect gitlab-ce --format='{{.State.Health.Status}}' 2>/dev/null | grep -q "healthy"; then
+            echo "✅ GitLab is healthy!"
+            break
+        fi
+        sleep 10
+        WAITED=$((WAITED + 10))
+        if [ $((WAITED % 60)) -eq 0 ]; then
+            echo "  Still waiting... ($WAITED/$MAX_WAIT seconds)"
+        fi
+    done
+    
+    if [ $WAITED -ge $MAX_WAIT ]; then
+        echo "⚠️  GitLab took longer than expected"
+        echo "   Continuing anyway - you can check status later"
+    fi
+fi
+
+# Now start Oxidized (or all services if GitLab not installed)
 echo ""
-echo "Waiting for services to start (60 seconds)..."
-sleep 60
+echo "Starting all remaining services..."
+docker compose up -d
 
 if [ "${INSTALL_GITLAB}" = "true" ] && [ "${INSTALL_OXIDIZED}" = "true" ]; then
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Step 8: GitLab Integration"
+    echo "Step 8: GitLab Integration Setup"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    ./scripts/06_setup_ssh_and_gitlab.sh
+    
+    echo ""
+    echo "Now configuring GitLab integration..."
+    echo "This will create the Oxidized user, project, and token."
+    echo ""
+    
+    # Run the GitLab setup script
+    ./scripts/06_setup_gitlab_token.sh
+    
+    # After token setup, Oxidized will be started automatically
+    echo ""
+    echo "✅ GitLab integration configured!"
 fi
 
 echo ""
