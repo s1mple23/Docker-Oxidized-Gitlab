@@ -222,12 +222,7 @@ If Docker needs to be installed, the system will:
 This section provides a complete walkthrough with placeholders for screenshots.
 
 #### 1. Initial Wizard
-
-**Screenshot 1: Configuration Wizard Start**
-```
 <img width="1373" height="1390" alt="image" src="https://github.com/user-attachments/assets/0b7bdcde-a41b-4c7a-a070-6a26bc128153" />
-
-```
 
 **What you'll see:**
 - Organization name prompt
