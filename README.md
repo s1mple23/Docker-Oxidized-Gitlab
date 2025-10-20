@@ -1286,8 +1286,6 @@ You now have a **fully functional network device backup system** with:
 
 ---
 
-## 📞 Support & Contributing
-
 ### Getting Help
 
 - Review the troubleshooting section
@@ -1310,10 +1308,3 @@ You now have a **fully functional network device backup system** with:
 **License:** MIT
 
 ---
-
-**End of Documentation**
-
-**Example Setup**
-
-
-For questions or issues, review the logs and troubleshooting sections above.
