@@ -238,12 +238,7 @@ This section provides a complete walkthrough with placeholders for screenshots.
 ---
 
 #### 2. Automatic Installation Progress
-
-**Screenshot 2: Installation Running**
-```
 <img width="1373" height="1390" alt="image" src="https://github.com/user-attachments/assets/4e803c37-0e2a-42dc-a8c7-cf5bb759ea69" />
-
-```
 
 **What happens:**
 - Package installation
@@ -254,8 +249,6 @@ This section provides a complete walkthrough with placeholders for screenshots.
 ---
 
 #### 3. Reboot (If Needed)
-
-**Screenshot 3: Reboot Prompt**
 <img width="726" height="302" alt="image" src="https://github.com/user-attachments/assets/30a02b69-1d31-432b-b8fc-56e2046bfd28" />
 
 
@@ -271,8 +264,6 @@ This section provides a complete walkthrough with placeholders for screenshots.
 ---
 
 #### 4. GitLab First Login
-
-**Screenshot 4: GitLab Login Page**
 <img width="1182" height="607" alt="image" src="https://github.com/user-attachments/assets/f4a477bc-5178-44d2-aef2-56d3e874b8ff" />
 
 
@@ -283,8 +274,6 @@ This section provides a complete walkthrough with placeholders for screenshots.
 ---
 
 #### 5. Create Oxidized User
-
-**Screenshot 5: GitLab Admin - New User**
 <img width="1920" height="1200" alt="image" src="https://github.com/user-attachments/assets/c8a9eb6f-bef1-485d-8787-bf8a305381b5" />
 
 
@@ -293,7 +282,6 @@ This section provides a complete walkthrough with placeholders for screenshots.
 - Username: oxidized
 - Email: oxidized@example.com
 
-**Screenshot 6: Set User Password**
 <img width="751" height="823" alt="image" src="https://github.com/user-attachments/assets/6fc104e7-4534-42be-8a08-195aaf2170fa" />
 <img width="1404" height="451" alt="image" src="https://github.com/user-attachments/assets/8c177db5-7ba8-488e-b922-1e9146ded89c" />
 <img width="795" height="922" alt="image" src="https://github.com/user-attachments/assets/573db28b-5ee7-4232-ac5f-80997a3b5f89" />
@@ -302,65 +290,34 @@ This section provides a complete walkthrough with placeholders for screenshots.
 ---
 
 #### 6. Login as Oxidized User
-
-**Screenshot 7: Login as Oxidized**
 <img width="816" height="530" alt="image" src="https://github.com/user-attachments/assets/e208290b-eb05-4d8f-9a7c-0d920194ea8e" />
-
-
-**Screenshot 8: Change Password Prompt**
 <img width="891" height="553" alt="image" src="https://github.com/user-attachments/assets/83c78f4d-f8bc-4d1b-9e61-8956e7983b03" />
 <img width="720" height="496" alt="image" src="https://github.com/user-attachments/assets/6ce03c5f-9e07-44cf-ac57-bbd945e2c2a7" />
 ---
 
 #### 7. Create Network Project
-
-**Screenshot 9: New Project**
 <img width="1132" height="553" alt="image" src="https://github.com/user-attachments/assets/ea6c1955-c773-4ac1-9a6f-e9ca164da8d2" />
-
-
-**Screenshot 10: Create Blank Project**
 <img width="986" height="434" alt="image" src="https://github.com/user-attachments/assets/ffb5e559-f037-4919-a0c0-997a967f0bce" />
-
-
-**Screenshot 11: Project Settings**
 <img width="1346" height="752" alt="image" src="https://github.com/user-attachments/assets/71173353-87a4-40cc-9fd9-03b2e93b5867" />
-
-
-**Screenshot 12: Empty Project Created**
 <img width="1920" height="1200" alt="image" src="https://github.com/user-attachments/assets/b0909447-234b-4aa6-b59a-547bb95cafe4" />
 
 ---
 
 #### 8. Add SSH Deploy Key
-
-**Screenshot 13: Project Settings - Repository**
 <img width="1685" height="429" alt="image" src="https://github.com/user-attachments/assets/d236d64b-93e3-4a2d-92ad-873fca3cca38" />
-
-
-**Screenshot 14: Add Deploy Key Form**
 <img width="758" height="648" alt="image" src="https://github.com/user-attachments/assets/ce6b2c42-3da3-4242-8cf6-e027b5705502" />
-
-
-**Screenshot 15: Deploy Key Added**
 <img width="1160" height="431" alt="image" src="https://github.com/user-attachments/assets/0155f8a4-b604-4fc7-8b04-0c250c3157b9" />
 
 
 ---
 
 #### 9. Verification
-
-**Screenshot 16: SSH Connection Test**
 <img width="653" height="652" alt="image" src="https://github.com/user-attachments/assets/2b1fff33-c258-460f-bf8e-d0f2709f97aa" />
-
-
-**Screenshot 17: Initial Push Success**
 <img width="867" height="505" alt="image" src="https://github.com/user-attachments/assets/bd531b9b-5048-49b3-8a2c-8750f2bc4c10" />
 
 ---
 
 #### 10. First Device Backup
-
-**Screenshot 18: Trigger Commit Change on PaloAlto**
 <img width="1018" height="260" alt="image" src="https://github.com/user-attachments/assets/4ac59978-5de2-43bd-8ffd-652f8ec026c7" />
 
 
@@ -373,15 +330,12 @@ Gitlab:
 <img width="894" height="286" alt="image" src="https://github.com/user-attachments/assets/98bc5f4f-cc07-4f6d-8fec-3be065163da9" />
 <img width="1130" height="1019" alt="image" src="https://github.com/user-attachments/assets/2f17d8fa-fd5b-4f0e-aa27-1fb5ad445fef" />
 
-**Screenshot 20: Device Config File**
 <img width="1388" height="609" alt="image" src="https://github.com/user-attachments/assets/f98f412a-8338-4739-b006-510759940cd0" />
 
 
 ---
 
 #### 11. Monitoring
-
-**Screenshot 24: Check Status Script**
 <img width="1076" height="492" alt="image" src="https://github.com/user-attachments/assets/a066e431-82c4-4c9f-98ed-7412e9a9710f" />
 
 ---
