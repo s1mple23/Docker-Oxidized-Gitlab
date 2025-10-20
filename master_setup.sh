@@ -879,50 +879,36 @@ if [ -f "$INSTALL_DIR/.reboot_required" ]; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     ./scripts/02_setup_networks.sh
     
-    echo ""
+echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Step 3: Certificate Setup"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     ./scripts/03_certificate_setup.sh
     
+    # If existing mode, script 03 exits early and we call script 04
     if [ "$CERT_MODE" = "existing" ]; then
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "Step 4: Generate CSRs"
+        echo "Step 4: Existing Certificate Handler"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        ./scripts/04_existing_certificates.sh
         
-        [ "${INSTALL_OXIDIZED}" = "true" ] && ./scripts/04_generate_csr.sh "${OXIDIZED_DOMAIN}"
-        [ "${INSTALL_GITLAB}" = "true" ] && ./scripts/04_generate_csr.sh "${GITLAB_DOMAIN}"
-        
+        # After script 04 completes, install CA certs
         echo ""
-        echo "╔══════════════════════════════════════════════╗"
-        echo "║     ⚠️  ACTION REQUIRED: CERTIFICATES       ║"
-        echo "╚══════════════════════════════════════════════╝"
-        echo ""
-        echo "CSRs generated in: certificates/csr/"
-        echo ""
-        echo "Please:"
-        echo "1. Submit CSRs to your CA"
-        echo "2. Place signed certificates in: certificates/ssl/"
-        [ "${INSTALL_OXIDIZED}" = "true" ] && echo "   - ${OXIDIZED_DOMAIN}.crt"
-        [ "${INSTALL_GITLAB}" = "true" ] && echo "   - ${GITLAB_DOMAIN}.crt"
-        echo ""
-        read -p "Press ENTER when certificates are ready..."
-        
-        echo ""
-        echo "Verifying certificates..."
-        while true; do
-            if ./scripts/05_verify_certificates.sh 2>&1 | grep -q "All checks passed"; then
-                echo -e "${GREEN}✅ All certificates verified${NC}"
-                break
-            else
-                echo ""
-                echo -e "${RED}❌ Certificate verification failed${NC}"
-                echo ""
-                read -p "Press ENTER to verify again..."
-            fi
-        done
+        echo "Installing CA certificates on this server..."
+        CA_DIR="$INSTALL_DIR/certificates/ca"
+        if [ -n "$(ls -A $CA_DIR/*.crt 2>/dev/null)" ]; then
+            sudo cp "$CA_DIR"/*.crt /usr/local/share/ca-certificates/
+            sudo chmod 644 /usr/local/share/ca-certificates/*.crt
+            sudo update-ca-certificates --fresh
+            echo "✅ CA certificates installed on this server"
+        else
+            echo "ℹ️  No CA certificates to install"
+        fi
     fi
+    
+    echo ""
+    echo "✅ Certificate setup completed"
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -1070,54 +1056,42 @@ echo "Step 2: Docker Network Setup"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 ./scripts/02_setup_networks.sh
 
+# ============================================================================
+# CERTIFICATE SETUP SECTION - CLEAN FLOW
+# Replace the certificate section in master_setup.sh with this
+# ============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Step 3: Certificate Setup"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 ./scripts/03_certificate_setup.sh
 
+# If existing mode, script 03 exits early and we call script 04
 if [ "$CERT_MODE" = "existing" ]; then
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Step 4: Generate CSRs"
+    echo "Step 4: Existing Certificate Handler"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ./scripts/04_existing_certificates.sh
     
-    [ "${INSTALL_OXIDIZED}" = "true" ] && ./scripts/04_generate_csr.sh "${OXIDIZED_DOMAIN}"
-    [ "${INSTALL_GITLAB}" = "true" ] && ./scripts/04_generate_csr.sh "${GITLAB_DOMAIN}"
-    
+    # After script 04 completes, install CA certs
     echo ""
-    echo "╔══════════════════════════════════════════════╗"
-    echo "║     ⚠️  ACTION REQUIRED: CERTIFICATES       ║"
-    echo "╚══════════════════════════════════════════════╝"
-    echo ""
-    echo "CSRs generated in: certificates/csr/"
-    echo ""
-    echo "Please:"
-    echo "1. Submit CSRs to your CA"
-    echo "2. Place signed certificates in: certificates/ssl/"
-    [ "${INSTALL_OXIDIZED}" = "true" ] && echo "   - ${OXIDIZED_DOMAIN}.crt"
-    [ "${INSTALL_GITLAB}" = "true" ] && echo "   - ${GITLAB_DOMAIN}.crt"
-    echo ""
-    read -p "Press ENTER when certificates are ready..."
-    
-    echo ""
-    echo "Verifying certificates..."
-    while true; do
-        if ./scripts/05_verify_certificates.sh 2>&1 | grep -q "All checks passed"; then
-            echo -e "${GREEN}✅ All certificates verified${NC}"
-            break
-        else
-            echo ""
-            echo -e "${RED}❌ Certificate verification failed${NC}"
-            echo ""
-            read -p "Press ENTER to verify again..."
-        fi
-    done
-else
-    echo ""
-    echo "✅ Self-signed certificates generated automatically"
+    echo "Installing CA certificates on this server..."
+    CA_DIR="$INSTALL_DIR/certificates/ca"
+    if [ -n "$(ls -A $CA_DIR/*.crt 2>/dev/null)" ]; then
+        sudo cp "$CA_DIR"/*.crt /usr/local/share/ca-certificates/
+        sudo chmod 644 /usr/local/share/ca-certificates/*.crt
+        sudo update-ca-certificates --fresh
+        echo "✅ CA certificates installed on this server"
+    else
+        echo "ℹ️  No CA certificates to install"
+    fi
 fi
 
+echo ""
+echo "✅ Certificate setup completed"
+
+# Continue to firewall
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Step 5: Firewall Setup"
