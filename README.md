@@ -198,7 +198,7 @@ If Docker needs to be installed, the system will:
 │   ├── 01_initial_setup.sh
 │   ├── 02_setup_networks.sh
 │   ├── 03_certificate_setup.sh
-│   ├── 04_generate_csr.sh
+│   ├── 04_existing_certificates.sh
 │   ├── 05_verify_certificates.sh
 │   ├── 06_setup_ssh_and_gitlab.sh  # SSH integration
 │   ├── 07_setup_firewall.sh
