@@ -323,7 +323,6 @@ Gitlab:
 <img width="894" height="286" alt="image" src="https://github.com/user-attachments/assets/98bc5f4f-cc07-4f6d-8fec-3be065163da9" />
 <img width="1130" height="1019" alt="image" src="https://github.com/user-attachments/assets/2f17d8fa-fd5b-4f0e-aa27-1fb5ad445fef" />
 
-<img width="1388" height="609" alt="image" src="https://github.com/user-attachments/assets/f98f412a-8338-4739-b006-510759940cd0" />
 
 
 ---
