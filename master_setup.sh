@@ -592,7 +592,7 @@ NGINX_MAIN
 if [ "${INSTALL_OXIDIZED}" = "true" ]; then
     cat > nginx/conf.d/oxidized.conf << EOF
 upstream oxidized_backend {
-    server ${OXINET_OXIDIZED_IP}:8888;
+    server ${OXIDIZED_CONTAINER_NAME}:8888;
 }
 server {
     listen 443 ssl http2;
@@ -616,7 +616,7 @@ fi
 if [ "${INSTALL_GITLAB}" = "true" ]; then
     cat > nginx/conf.d/gitlab.conf << EOF
 upstream gitlab_backend {
-    server ${GITLABNET_GITLAB_IP}:443;
+    server ${GITLAB_CONTAINER_NAME}:443;
 }
 server {
     listen 443 ssl http2;
