@@ -1131,6 +1131,14 @@ echo ""
 echo "Waiting for services to stabilize (30 seconds)..."
 sleep 30
 
+if [ "${INSTALL_OXIDIZED}" = "true" ] && [ "${INSTALL_GITLAB}" = "true" ]; then
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Step 7b: Creating Systemd Startup Service"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ./scripts/10_systemd_startup.sh
+fi
+
 if [ "${INSTALL_GITLAB}" = "true" ] && [ "${INSTALL_OXIDIZED}" = "true" ]; then
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
