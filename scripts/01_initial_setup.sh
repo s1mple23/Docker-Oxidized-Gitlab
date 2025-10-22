@@ -22,16 +22,6 @@ sudo apt update && sudo apt upgrade -y
 echo "Installing base dependencies..."
 sudo apt install -y ${BASE_PACKAGES} ${ADDITIONAL_PACKAGES}
 
-echo "Creating Docker user..."
-if ! id "$DOCKER_USER" &>/dev/null; then
-    sudo useradd -m -s /bin/bash "$DOCKER_USER"
-    echo "$DOCKER_USER:$DOCKER_USER_PASSWORD" | sudo chpasswd
-    echo "✅ Created $DOCKER_USER"
-else
-    echo "✅ $DOCKER_USER already exists"
-fi
-sudo usermod -aG sudo "$DOCKER_USER"
-
 # Check if Docker needs to be installed
 if [ "$SKIP_DOCKER_INSTALL" = "false" ]; then
     if ! command -v docker &> /dev/null; then
@@ -65,10 +55,6 @@ if [ "$SKIP_DOCKER_INSTALL" = "false" ]; then
     if ! groups "$ADMIN_USER" | grep -q docker; then
         sudo usermod -aG docker "$ADMIN_USER"
         USER_NEEDS_GROUP=true
-    fi
-    
-    if ! groups "$DOCKER_USER" | grep -q docker; then
-        sudo usermod -aG docker "$DOCKER_USER"
     fi
 else
     echo "⏭️  Skipping Docker installation"

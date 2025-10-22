@@ -21,7 +21,6 @@ sudo ufw allow ${SSH_PORT}/tcp comment "SSH"
 sudo ufw allow ${NGINX_HTTP_PORT}/tcp comment "HTTP"
 sudo ufw allow ${NGINX_HTTPS_PORT}/tcp comment "HTTPS"
 [ "${INSTALL_GITLAB}" = "true" ] && sudo ufw allow ${GITLAB_SSH_PORT}/tcp comment "GitLab SSH"
-[ -n "$ALLOWED_NETWORK" ] && sudo ufw allow from ${ALLOWED_NETWORK} comment "Management"
 sudo ufw --force enable
 
 echo "✅ Firewall configured"

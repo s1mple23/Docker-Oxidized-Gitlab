@@ -98,8 +98,7 @@ Device 1: 10.99.99.50:panos
 Device 2: 192.168.1.1:ios:admin
 Device 3: [ENTER to finish]
 
-=== Network Settings ===
-Allowed management network [192.168.71.0/28]: 192.168.1.0/24
+
 ```
 
 **All passwords are auto-generated** and displayed at the end of installation.
@@ -750,10 +749,8 @@ sudo passwd dockeruser
 
 3. ✅ **Enable and Configure Firewall**
    - Set `UFW_ENABLED="true"` in config.env
-   - Configure `ALLOWED_NETWORK` to restrict management access
 
 4. ✅ **Restrict Network Access**
-   - Use `ALLOWED_NETWORK` to limit who can access the services
    - Consider putting services behind VPN
 
 5. ✅ **Regular Backups**
@@ -1186,7 +1183,6 @@ GITLAB_PROJECT_NAMESPACE="oxidized"
 GITLAB_PROJECT_NAME="network"
 
 # Network Settings
-ALLOWED_NETWORK="192.168.1.0/24"
 SSH_PORT="22"
 NGINX_HTTP_PORT="80"
 NGINX_HTTPS_PORT="443"

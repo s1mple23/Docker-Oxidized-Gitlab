@@ -90,15 +90,10 @@ if [ ! -f "config.env" ]; then
     read -p "Admin username [administrator]: " ADMIN_USER
     ADMIN_USER=${ADMIN_USER:-administrator}
     
-    read -p "Docker username [dockeruser]: " DOCKER_USER
-    DOCKER_USER=${DOCKER_USER:-dockeruser}
-    
     # Generate passwords
     echo ""
     echo -e "${YELLOW}Generating secure passwords...${NC}"
     
-    DOCKER_USER_PASSWORD=$(generate_password 16)
-    GENERATED_PASSWORDS["Docker User ($DOCKER_USER)"]="$DOCKER_USER_PASSWORD"
     
     if [ "$INSTALL_GITLAB" = "true" ]; then
         GITLAB_ROOT_PASSWORD=$(generate_password 20)
@@ -149,21 +144,11 @@ if [ ! -f "config.env" ]; then
         done
     fi
     
-    # Network Settings
-    echo ""
-    echo -e "${CYAN}=== Network Settings ===${NC}"
-    read -p "Allowed management network [192.168.71.0/28]: " ALLOWED_NETWORK
-    ALLOWED_NETWORK=${ALLOWED_NETWORK:-192.168.71.0/28}
-    
     # Generate config.env
     echo ""
     echo "Generating config.env..."
     
     cp config.env.example config.env
-    
-    # Escape passwords
-    DOCKER_USER_PASSWORD_ESC=$(escape_for_sed "$DOCKER_USER_PASSWORD")
-    ALLOWED_NETWORK_ESC=$(escape_for_sed "$ALLOWED_NETWORK")
     
     # Replace values
     sed -i "s/^ORG_NAME=.*/ORG_NAME=\"${ORG_NAME}\"/" config.env
@@ -172,9 +157,6 @@ if [ ! -f "config.env" ]; then
     sed -i "s/^INSTALL_GITLAB=.*/INSTALL_GITLAB=\"${INSTALL_GITLAB}\"/" config.env
     sed -i "s/^CERT_MODE=.*/CERT_MODE=\"${CERT_MODE}\"/" config.env
     sed -i "s/^ADMIN_USER=.*/ADMIN_USER=\"${ADMIN_USER}\"/" config.env
-    sed -i "s/^DOCKER_USER=.*/DOCKER_USER=\"${DOCKER_USER}\"/" config.env
-    sed -i "s|^DOCKER_USER_PASSWORD=.*|DOCKER_USER_PASSWORD=\"${DOCKER_USER_PASSWORD_ESC}\"|" config.env
-    sed -i "s|^ALLOWED_NETWORK=.*|ALLOWED_NETWORK=\"${ALLOWED_NETWORK_ESC}\"|" config.env
     
     if [ "$INSTALL_GITLAB" = "true" ]; then
         GITLAB_ROOT_PASSWORD_ESC=$(escape_for_sed "$GITLAB_ROOT_PASSWORD")
@@ -227,7 +209,7 @@ GITLAB_PROJECT_PATH=$(eval echo "${GITLAB_PROJECT_PATH}")
 OXIDIZED_GIT_EMAIL=$(eval echo "${OXIDIZED_GIT_EMAIL}")
 GITLAB_OXIDIZED_EMAIL=$(eval echo "${GITLAB_OXIDIZED_EMAIL}")
 
-REQUIRED_VARS=("ORG_NAME" "DOMAIN" "ADMIN_USER" "DOCKER_USER" "DOCKER_USER_PASSWORD")
+REQUIRED_VARS=("ORG_NAME" "DOMAIN" "ADMIN_USER" )
 [ "${INSTALL_OXIDIZED}" = "true" ] && REQUIRED_VARS+=("DEVICE_DEFAULT_PASSWORD")
 [ "${INSTALL_GITLAB}" = "true" ] && REQUIRED_VARS+=("GITLAB_ROOT_PASSWORD")
 
@@ -301,7 +283,6 @@ Mode: $CERT_MODE
 
 [USERS]
 Admin User: $ADMIN_USER
-Docker User: $DOCKER_USER
 
 [DOMAINS]
 EOF
@@ -312,7 +293,6 @@ EOF
 cat >> "$CONFIG_SUMMARY" << EOF
 
 [NETWORK]
-Allowed Network: $ALLOWED_NETWORK
 EOF
 
 if [ "${INSTALL_OXIDIZED}" = "true" ]; then
@@ -1195,7 +1175,6 @@ if [ -f "GENERATED_PASSWORDS.txt" ]; then
     echo "🔒 To change passwords later:"
     [ "${INSTALL_GITLAB}" = "true" ] && echo "   • GitLab: https://${GITLAB_DOMAIN}/admin"
     [ "${INSTALL_OXIDIZED}" = "true" ] && echo "   • Devices: Edit config.env and rebuild"
-    echo "   • System: passwd $DOCKER_USER"
     echo ""
 fi
 
