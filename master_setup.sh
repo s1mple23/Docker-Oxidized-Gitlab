@@ -1,6 +1,6 @@
 #!/bin/bash
 # master_setup.sh - Complete SSH-Only Infrastructure Setup
-# Version: 11.0 - Pure SSH with Deploy Key (NO TOKEN)
+# Version: 11.2 - Fixed duplicate code issue
 set -e
 
 RED='\033[0;31m'
@@ -25,10 +25,212 @@ escape_for_sed() {
     echo "$1" | sed 's/[&/\]/\\&/g'
 }
 
+# ============================================================================
+# MAIN INSTALLATION FUNCTION (used by both initial and post-reboot)
+# ============================================================================
+run_installation_steps() {
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Step 2: Docker Network Setup"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ./scripts/02_setup_networks.sh
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Step 3: Certificate Setup"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ./scripts/03_certificate_setup.sh
+
+    # If existing mode, script 03 exits early and we call script 04
+    if [ "$CERT_MODE" = "existing" ]; then
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Step 4: Existing Certificate Handler"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        ./scripts/04_existing_certificates.sh
+        
+        # After script 04 completes, install CA certs
+        echo ""
+        echo "Installing CA certificates on this server..."
+        CA_DIR="$INSTALL_DIR/certificates/ca"
+        if [ -n "$(ls -A $CA_DIR/*.crt 2>/dev/null)" ]; then
+            sudo cp "$CA_DIR"/*.crt /usr/local/share/ca-certificates/
+            sudo chmod 644 /usr/local/share/ca-certificates/*.crt
+            sudo update-ca-certificates --fresh
+            echo "✅ CA certificates installed on this server"
+        else
+            echo "ℹ️  No CA certificates to install"
+        fi
+    fi
+
+    echo ""
+    echo "✅ Certificate setup completed"
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Step 5: Firewall Setup"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ./scripts/07_setup_firewall.sh
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Step 6: Building Docker Containers"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    docker compose build --no-cache
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Step 7: Starting Services"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    # Start GitLab first if both services are installed
+    if [ "${INSTALL_GITLAB}" = "true" ]; then
+        echo "Starting GitLab (will take 3-5 minutes to initialize)..."
+        docker compose up -d gitlab-ce nginx
+        
+        echo ""
+        echo "Waiting for GitLab to be ready..."
+        MAX_WAIT=300
+        WAITED=0
+        while [ $WAITED -lt $MAX_WAIT ]; do
+            if docker inspect gitlab-ce --format='{{.State.Health.Status}}' 2>/dev/null | grep -q "healthy"; then
+                echo "✅ GitLab is healthy!"
+                break
+            fi
+            sleep 10
+            WAITED=$((WAITED + 10))
+            if [ $((WAITED % 60)) -eq 0 ]; then
+                echo "  Still waiting... ($WAITED/$MAX_WAIT seconds)"
+            fi
+        done
+        
+        if [ $WAITED -ge $MAX_WAIT ]; then
+            echo "⚠️  GitLab took longer than expected"
+            echo "   Continuing anyway - you can check status later"
+        fi
+    fi
+
+    # Now start Oxidized (or all services if GitLab not installed)
+    echo ""
+    echo "Starting all remaining services..."
+    docker compose up -d
+
+    echo ""
+    echo "Waiting for services to stabilize (30 seconds)..."
+    sleep 30
+
+    # ========================================================================
+    # STEP 7B: CREATE SYSTEMD SERVICE (if both services installed)
+    # ========================================================================
+    if [ "${INSTALL_OXIDIZED}" = "true" ] && [ "${INSTALL_GITLAB}" = "true" ]; then
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Step 7b: Creating Systemd Startup Service"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "Creating systemd service for proper startup order..."
+        
+        if ./scripts/10_systemd_startup.sh 2>&1; then
+            echo "✅ Systemd service created successfully"
+            
+            if sudo systemctl is-enabled docker-infrastructure.service &>/dev/null; then
+                echo "✅ Service is enabled and will run at boot"
+            else
+                echo "⚠️  Service created but not enabled"
+            fi
+        else
+            echo "⚠️  Systemd service creation had issues"
+        fi
+        
+        echo ""
+    fi
+
+    # ========================================================================
+    # STEP 8: GITLAB SSH INTEGRATION
+    # ========================================================================
+    if [ "${INSTALL_GITLAB}" = "true" ] && [ "${INSTALL_OXIDIZED}" = "true" ]; then
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Step 8: GitLab SSH Integration Setup"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        
+        echo ""
+        echo "Now configuring GitLab SSH integration..."
+        echo "This requires manual configuration in GitLab web interface."
+        echo ""
+        
+        ./scripts/06_setup_ssh_and_gitlab.sh
+        
+        echo ""
+        echo "✅ GitLab SSH integration configured!"
+    fi
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Final Step: Status Check"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ./scripts/08_check_status.sh
+}
+
+# ============================================================================
+# DISPLAY FINAL SUMMARY
+# ============================================================================
+display_final_summary() {
+    if [ -f "GENERATED_PASSWORDS.txt" ]; then
+        echo ""
+        echo "╔══════════════════════════════════════════════╗"
+        echo "║     🔐 GENERATED PASSWORDS                  ║"
+        echo "╚══════════════════════════════════════════════╝"
+        echo ""
+        cat GENERATED_PASSWORDS.txt
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "⚠️  IMPORTANT SECURITY NOTICE:"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "📝 Saved in: $INSTALL_DIR/GENERATED_PASSWORDS.txt"
+        echo ""
+        echo "⚠️  PLEASE:"
+        echo "   1. Save these passwords securely"
+        echo "   2. Change them after first login"
+        echo "   3. Delete GENERATED_PASSWORDS.txt after saving"
+        echo ""
+    fi
+
+    echo ""
+    echo "╔══════════════════════════════════════════════╗"
+    echo "║     ✅ INSTALLATION COMPLETE!               ║"
+    echo "╚══════════════════════════════════════════════╝"
+    echo ""
+    echo "📁 Installation Directory: $INSTALL_DIR"
+    echo "📋 Configuration Summary: $CONFIG_SUMMARY"
+    echo ""
+    echo "🌐 Services:"
+    [ "${INSTALL_OXIDIZED}" = "true" ] && echo "  • Oxidized: https://${OXIDIZED_DOMAIN}"
+    [ "${INSTALL_GITLAB}" = "true" ] && echo "  • GitLab: https://${GITLAB_DOMAIN}"
+    echo ""
+    if [ "${INSTALL_OXIDIZED}" = "true" ]; then
+        echo "⚡ Oxidized Features:"
+        echo "  • Fast backups every 5 minutes"
+        echo "  • SSH-based push to GitLab"
+        echo "  • Immediate trigger: ./scripts/trigger_backup.sh all"
+        if [ "${INSTALL_GITLAB}" = "true" ]; then
+            echo "  • Systemd startup service enabled (proper boot order)"
+        fi
+        echo ""
+    fi
+    echo "✅ Setup completed: $(date)"
+    echo ""
+}
+
+# ============================================================================
+# MAIN SCRIPT STARTS HERE
+# ============================================================================
+
 clear
 echo "╔══════════════════════════════════════════════╗"
 echo "║  Docker Infrastructure Master Setup          ║"
-echo "║  Version 11.0 - SSH ONLY (No Token)          ║"
+echo "║  Version 11.2 - SSH ONLY (No Token)          ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 echo "Started: $(date)"
@@ -93,7 +295,6 @@ if [ ! -f "config.env" ]; then
     # Generate passwords
     echo ""
     echo -e "${YELLOW}Generating secure passwords...${NC}"
-    
     
     if [ "$INSTALL_GITLAB" = "true" ]; then
         GITLAB_ROOT_PASSWORD=$(generate_password 20)
@@ -209,7 +410,7 @@ GITLAB_PROJECT_PATH=$(eval echo "${GITLAB_PROJECT_PATH}")
 OXIDIZED_GIT_EMAIL=$(eval echo "${OXIDIZED_GIT_EMAIL}")
 GITLAB_OXIDIZED_EMAIL=$(eval echo "${GITLAB_OXIDIZED_EMAIL}")
 
-REQUIRED_VARS=("ORG_NAME" "DOMAIN" "ADMIN_USER" )
+REQUIRED_VARS=("ORG_NAME" "DOMAIN" "ADMIN_USER")
 [ "${INSTALL_OXIDIZED}" = "true" ] && REQUIRED_VARS+=("DEVICE_DEFAULT_PASSWORD")
 [ "${INSTALL_GITLAB}" = "true" ] && REQUIRED_VARS+=("GITLAB_ROOT_PASSWORD")
 
@@ -457,7 +658,7 @@ ROUTERDB_HEADER
         fi
     done
 
-    # SIMPLIFIED Wrapper script - SSH only
+    # Wrapper script
     if [ "${INSTALL_GITLAB}" = "true" ]; then
         cat > oxidized/config/oxidized_wrapper.sh << 'EOF'
 #!/bin/bash
@@ -666,7 +867,6 @@ if [ "${INSTALL_GITLAB}" = "true" ]; then
     networks:
       gitlabnet:
 EOF
-    # Nur IP hinzufügen wenn gesetzt
     [ -n "${GITLABNET_GITLAB_IP}" ] && echo "        ipv4_address: ${GITLABNET_GITLAB_IP}" >> docker-compose.yml
     
     cat >> docker-compose.yml << 'EOF'
@@ -696,7 +896,6 @@ if [ "${INSTALL_OXIDIZED}" = "true" ]; then
     networks:
       oxinet:
 EOF
-    # Nur IP hinzufügen wenn gesetzt
     [ -n "${OXINET_OXIDIZED_IP}" ] && echo "        ipv4_address: ${OXINET_OXIDIZED_IP}" >> docker-compose.yml
     
     if [ "${INSTALL_GITLAB}" = "true" ]; then
@@ -740,7 +939,6 @@ cat >> docker-compose.yml << EOF
     networks:
       nginxnet:
 EOF
-# Nur IP hinzufügen wenn gesetzt
 [ -n "${NGINXNET_NGINX_IP}" ] && echo "        ipv4_address: ${NGINXNET_NGINX_IP}" >> docker-compose.yml
 
 [ "${INSTALL_OXIDIZED}" = "true" ] && echo "      oxinet:" >> docker-compose.yml
@@ -805,7 +1003,6 @@ echo -e "${GREEN}✅ Docker Compose created${NC}"
 echo ""
 echo "Creating utility scripts..."
 
-# Trigger backup script
 cat > scripts/trigger_backup.sh << 'TRIGGER'
 #!/bin/bash
 # Trigger immediate backup for device(s)
@@ -859,127 +1056,17 @@ if [ -f "$INSTALL_DIR/.reboot_required" ]; then
     OXIDIZED_DOMAIN=$(eval echo "${OXIDIZED_DOMAIN}")
     GITLAB_DOMAIN=$(eval echo "${GITLAB_DOMAIN}")
     
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Step 2: Docker Network Setup"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    ./scripts/02_setup_networks.sh
+    # Run main installation steps
+    run_installation_steps
     
-echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Step 3: Certificate Setup"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    ./scripts/03_certificate_setup.sh
-    
-    # If existing mode, script 03 exits early and we call script 04
-    if [ "$CERT_MODE" = "existing" ]; then
-        echo ""
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "Step 4: Existing Certificate Handler"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        ./scripts/04_existing_certificates.sh
-        
-        # After script 04 completes, install CA certs
-        echo ""
-        echo "Installing CA certificates on this server..."
-        CA_DIR="$INSTALL_DIR/certificates/ca"
-        if [ -n "$(ls -A $CA_DIR/*.crt 2>/dev/null)" ]; then
-            sudo cp "$CA_DIR"/*.crt /usr/local/share/ca-certificates/
-            sudo chmod 644 /usr/local/share/ca-certificates/*.crt
-            sudo update-ca-certificates --fresh
-            echo "✅ CA certificates installed on this server"
-        else
-            echo "ℹ️  No CA certificates to install"
-        fi
-    fi
-    
-    echo ""
-    echo "✅ Certificate setup completed"
-    
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Step 5: Firewall Setup"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    ./scripts/07_setup_firewall.sh
-    
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Step 6: Building Docker Containers"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    docker compose build --no-cache
-    
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Step 7: Starting Services"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    docker compose up -d
-    
-    echo ""
-    echo "Waiting for services to start (60 seconds)..."
-    sleep 60
-    
-    if [ "${INSTALL_GITLAB}" = "true" ] && [ "${INSTALL_OXIDIZED}" = "true" ]; then
-        echo ""
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "Step 8: GitLab SSH Integration"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        ./scripts/06_setup_ssh_and_gitlab.sh
-    fi
-    
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Final Step: Status Check"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    ./scripts/08_check_status.sh
-    
-    if [ -f "GENERATED_PASSWORDS.txt" ]; then
-        echo ""
-        echo "╔══════════════════════════════════════════════╗"
-        echo "║     🔐 GENERATED PASSWORDS                  ║"
-        echo "╚══════════════════════════════════════════════╝"
-        echo ""
-        cat GENERATED_PASSWORDS.txt
-        echo ""
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "⚠️  IMPORTANT SECURITY NOTICE:"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo ""
-        echo "📝 Saved in: $INSTALL_DIR/GENERATED_PASSWORDS.txt"
-        echo ""
-        echo "⚠️  PLEASE:"
-        echo "   1. Save these passwords securely"
-        echo "   2. Change them after first login"
-        echo "   3. Delete GENERATED_PASSWORDS.txt after saving"
-        echo ""
-    fi
-    
-    echo ""
-    echo "╔══════════════════════════════════════════════╗"
-    echo "║     ✅ INSTALLATION COMPLETE!               ║"
-    echo "╚══════════════════════════════════════════════╝"
-    echo ""
-    echo "📁 Installation Directory: $INSTALL_DIR"
-    echo "📋 Configuration Summary: $CONFIG_SUMMARY"
-    echo ""
-    echo "🌐 Services:"
-    [ "${INSTALL_OXIDIZED}" = "true" ] && echo "  • Oxidized: https://${OXIDIZED_DOMAIN}"
-    [ "${INSTALL_GITLAB}" = "true" ] && echo "  • GitLab: https://${GITLAB_DOMAIN}"
-    echo ""
-    if [ "${INSTALL_OXIDIZED}" = "true" ]; then
-        echo "⚡ Oxidized Features:"
-        echo "  • Fast backups every 5 minutes"
-        echo "  • SSH-based push to GitLab"
-        echo "  • Immediate trigger: ./scripts/trigger_backup.sh all"
-        echo ""
-    fi
-    echo "✅ Setup completed: $(date)"
-    echo ""
+    # Display final summary
+    display_final_summary
     
     exit 0
 fi
 
 # ============================================================================
-# RUN AUTOMATED INSTALLATION
+# RUN AUTOMATED INSTALLATION (FIRST TIME)
 # ============================================================================
 echo ""
 echo "╔══════════════════════════════════════════════╗"
@@ -1035,198 +1122,8 @@ if [ "${EXIT_CODE:-0}" -eq 99 ]; then
     exit 0
 fi
 
-# Continue if no reboot needed
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 2: Docker Network Setup"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-./scripts/02_setup_networks.sh
+# Continue if no reboot needed - run main installation steps
+run_installation_steps
 
-# ============================================================================
-# CERTIFICATE SETUP SECTION - CLEAN FLOW
-# Replace the certificate section in master_setup.sh with this
-# ============================================================================
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 3: Certificate Setup"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-./scripts/03_certificate_setup.sh
-
-# If existing mode, script 03 exits early and we call script 04
-if [ "$CERT_MODE" = "existing" ]; then
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Step 4: Existing Certificate Handler"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    ./scripts/04_existing_certificates.sh
-    
-    # After script 04 completes, install CA certs
-    echo ""
-    echo "Installing CA certificates on this server..."
-    CA_DIR="$INSTALL_DIR/certificates/ca"
-    if [ -n "$(ls -A $CA_DIR/*.crt 2>/dev/null)" ]; then
-        sudo cp "$CA_DIR"/*.crt /usr/local/share/ca-certificates/
-        sudo chmod 644 /usr/local/share/ca-certificates/*.crt
-        sudo update-ca-certificates --fresh
-        echo "✅ CA certificates installed on this server"
-    else
-        echo "ℹ️  No CA certificates to install"
-    fi
-fi
-
-echo ""
-echo "✅ Certificate setup completed"
-
-# Continue to firewall
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 5: Firewall Setup"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-./scripts/07_setup_firewall.sh
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 6: Building Docker Containers"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-docker compose build --no-cache
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 7: Starting Services"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-# Start GitLab first if both services are installed
-if [ "${INSTALL_GITLAB}" = "true" ]; then
-    echo "Starting GitLab (will take 3-5 minutes to initialize)..."
-    docker compose up -d gitlab-ce nginx
-    
-    echo ""
-    echo "Waiting for GitLab to be ready..."
-    MAX_WAIT=300
-    WAITED=0
-    while [ $WAITED -lt $MAX_WAIT ]; do
-        if docker inspect gitlab-ce --format='{{.State.Health.Status}}' 2>/dev/null | grep -q "healthy"; then
-            echo "✅ GitLab is healthy!"
-            break
-        fi
-        sleep 10
-        WAITED=$((WAITED + 10))
-        if [ $((WAITED % 60)) -eq 0 ]; then
-            echo "  Still waiting... ($WAITED/$MAX_WAIT seconds)"
-        fi
-    done
-    
-    if [ $WAITED -ge $MAX_WAIT ]; then
-        echo "⚠️  GitLab took longer than expected"
-        echo "   Continuing anyway - you can check status later"
-    fi
-fi
-
-# Now start Oxidized (or all services if GitLab not installed)
-echo ""
-echo "Starting all remaining services..."
-docker compose up -d
-
-echo ""
-echo "Waiting for services to stabilize (30 seconds)..."
-sleep 30
-
-if [ "${INSTALL_OXIDIZED}" = "true" ] && [ "${INSTALL_GITLAB}" = "true" ]; then
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Step 7b: Creating Systemd Startup Service"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    ./scripts/10_systemd_startup.sh
-fi
-
-if [ "${INSTALL_GITLAB}" = "true" ] && [ "${INSTALL_OXIDIZED}" = "true" ]; then
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Step 8: GitLab SSH Integration Setup"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    
-    echo ""
-    echo "Now configuring GitLab SSH integration..."
-    echo "This requires manual configuration in GitLab web interface."
-    echo ""
-    
-    # Run the GitLab SSH setup script
-    ./scripts/06_setup_ssh_and_gitlab.sh
-    
-    echo ""
-    echo "✅ GitLab SSH integration configured!"
-fi
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Final Step: Status Check"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-./scripts/08_check_status.sh
-
-# ============================================================================
-# DISPLAY GENERATED PASSWORDS
-# ============================================================================
-if [ -f "GENERATED_PASSWORDS.txt" ]; then
-    echo ""
-    echo "╔══════════════════════════════════════════════╗"
-    echo "║     🔐 GENERATED PASSWORDS                  ║"
-    echo "╚══════════════════════════════════════════════╝"
-    echo ""
-    cat GENERATED_PASSWORDS.txt
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "⚠️  IMPORTANT SECURITY NOTICE:"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
-    echo "📝 Saved in: $INSTALL_DIR/GENERATED_PASSWORDS.txt"
-    echo ""
-    echo "⚠️  PLEASE:"
-    echo "   1. Save these passwords in a secure location"
-    echo "   2. Use a password manager (recommended)"
-    echo "   3. Change passwords after first login"
-    echo "   4. Delete GENERATED_PASSWORDS.txt after saving"
-    echo ""
-    echo "🔒 To change passwords later:"
-    [ "${INSTALL_GITLAB}" = "true" ] && echo "   • GitLab: https://${GITLAB_DOMAIN}/admin"
-    [ "${INSTALL_OXIDIZED}" = "true" ] && echo "   • Devices: Edit config.env and rebuild"
-    echo ""
-fi
-
-# ============================================================================
-# FINAL SUMMARY
-# ============================================================================
-echo ""
-echo "╔══════════════════════════════════════════════╗"
-echo "║     ✅ INSTALLATION COMPLETE!               ║"
-echo "╚══════════════════════════════════════════════╝"
-echo ""
-echo "📁 Installation Directory: $INSTALL_DIR"
-echo "📋 Setup Log: $SETUP_LOG"
-echo "📋 Configuration Summary: $CONFIG_SUMMARY"
-echo ""
-echo "🌐 Services:"
-[ "${INSTALL_OXIDIZED}" = "true" ] && echo "  • Oxidized: https://${OXIDIZED_DOMAIN}"
-[ "${INSTALL_GITLAB}" = "true" ] && echo "  • GitLab: https://${GITLAB_DOMAIN}"
-echo ""
-if [ "${INSTALL_OXIDIZED}" = "true" ]; then
-    echo "⚡ Oxidized Features (SSH-based):"
-    echo "  • Fast backups every 5 minutes"
-    echo "  • SSH Deploy Key authentication"
-    echo "  • Immediate trigger: ./scripts/trigger_backup.sh all"
-    echo ""
-fi
-echo "📊 Next Steps:"
-echo "  • Check status: ./scripts/08_check_status.sh"
-echo "  • View logs: docker compose logs -f"
-echo "  • Backup: ./scripts/09_backup.sh"
-[ "${INSTALL_OXIDIZED}" = "true" ] && echo "  • Trigger backup: ./scripts/trigger_backup.sh all"
-echo ""
-if [ -f "GENERATED_PASSWORDS.txt" ]; then
-    echo "🔐 Security:"
-    echo "  • Review passwords: cat GENERATED_PASSWORDS.txt"
-    echo "  • Change them after first login!"
-    echo "  • Delete password file after saving securely"
-    echo ""
-fi
-echo "✅ Setup completed: $(date)"
-echo ""
+# Display final summary
+display_final_summary
