@@ -665,7 +665,11 @@ if [ "${INSTALL_GITLAB}" = "true" ]; then
       - ./certificates/ssl:/etc/gitlab/ssl:ro
     networks:
       gitlabnet:
-        ipv4_address: ${GITLABNET_GITLAB_IP}
+EOF
+    # Nur IP hinzufügen wenn gesetzt
+    [ -n "${GITLABNET_GITLAB_IP}" ] && echo "        ipv4_address: ${GITLABNET_GITLAB_IP}" >> docker-compose.yml
+    
+    cat >> docker-compose.yml << 'EOF'
     restart: unless-stopped
     environment:
       GITLAB_OMNIBUS_CONFIG: "from_file '/etc/gitlab/gitlab.rb'"
@@ -691,14 +695,15 @@ if [ "${INSTALL_OXIDIZED}" = "true" ]; then
       - ./oxidized/keys:/etc/oxidized/keys
     networks:
       oxinet:
-        ipv4_address: ${OXINET_OXIDIZED_IP}
 EOF
-
+    # Nur IP hinzufügen wenn gesetzt
+    [ -n "${OXINET_OXIDIZED_IP}" ] && echo "        ipv4_address: ${OXINET_OXIDIZED_IP}" >> docker-compose.yml
+    
     if [ "${INSTALL_GITLAB}" = "true" ]; then
         echo "      gitlabnet:" >> docker-compose.yml
     fi
 
-    cat >> docker-compose.yml << EOF
+    cat >> docker-compose.yml << 'EOF'
     restart: unless-stopped
 EOF
 
@@ -734,8 +739,9 @@ cat >> docker-compose.yml << EOF
       - nginx_logs:/var/log/nginx
     networks:
       nginxnet:
-        ipv4_address: ${NGINXNET_NGINX_IP}
 EOF
+# Nur IP hinzufügen wenn gesetzt
+[ -n "${NGINXNET_NGINX_IP}" ] && echo "        ipv4_address: ${NGINXNET_NGINX_IP}" >> docker-compose.yml
 
 [ "${INSTALL_OXIDIZED}" = "true" ] && echo "      oxinet:" >> docker-compose.yml
 [ "${INSTALL_GITLAB}" = "true" ] && echo "      gitlabnet:" >> docker-compose.yml
