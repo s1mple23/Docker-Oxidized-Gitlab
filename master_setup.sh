@@ -902,9 +902,18 @@ EOF
         echo "      gitlabnet:" >> docker-compose.yml
     fi
 
-    cat >> docker-compose.yml << 'EOF'
+    # WICHTIG: Restart policy hängt davon ab, ob GitLab installiert ist
+    if [ "${INSTALL_GITLAB}" = "true" ]; then
+        # Wenn beide Services installiert: systemd übernimmt die Kontrolle
+        cat >> docker-compose.yml << 'EOF'
+    restart: "no"
+EOF
+    else
+        # Nur Oxidized: normales Auto-Restart
+        cat >> docker-compose.yml << 'EOF'
     restart: unless-stopped
 EOF
+    fi
 
     if [ "${INSTALL_GITLAB}" = "true" ]; then
         cat >> docker-compose.yml << 'EOF'
@@ -996,6 +1005,13 @@ cat >> docker-compose.yml << 'EOF'
 EOF
 
 echo -e "${GREEN}✅ Docker Compose created${NC}"
+
+# Info ausgeben wenn spezielle restart policy verwendet wird
+if [ "${INSTALL_OXIDIZED}" = "true" ] && [ "${INSTALL_GITLAB}" = "true" ]; then
+    echo ""
+    echo "ℹ️  Note: Oxidized restart policy set to 'no'"
+    echo "   Systemd service will handle startup order after reboot"
+fi
 
 # ============================================================================
 # CREATE UTILITY SCRIPTS
